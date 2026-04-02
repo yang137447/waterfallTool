@@ -36,3 +36,30 @@ class TerraceLevel:
     drop_height_to_next: float
     basin_strength: float
     lip_profile_mode: LipProfileMode
+
+
+@dataclass(frozen=True)
+class LipCurveDraft:
+    level_index: int
+    points: list[Vec3]
+    continuity_segments: list[tuple[float, float]]
+    overridden: bool
+
+
+@dataclass(frozen=True)
+class GapSegment:
+    level_index: int
+    start_ratio: float
+    end_ratio: float
+    depth_strength: float
+    locked: bool
+
+
+@dataclass(frozen=True)
+class BlockerMass:
+    level_index: int
+    center: Vec3
+    width: float
+    height: float
+    forward_offset: float
+    manual: bool
