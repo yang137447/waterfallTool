@@ -13,6 +13,18 @@ from mathutils import Vector
 import waterfall_tool
 
 
+CACHE_DIR = ROOT / "cache"
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
+EXPORT_DIR = ROOT / "exports" / "demo"
+EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def require_object(name: str) -> bpy.types.Object:
+    obj = bpy.data.objects.get(name)
+    assert obj is not None, f"Required object '{name}' not found. Scene generation likely failed."
+    return obj
+
+
 def clear_scene() -> None:
     bpy.ops.object.select_all(action="SELECT")
     bpy.ops.object.delete()
@@ -67,27 +79,6 @@ def main() -> None:
     axis = bpy.data.objects.new("DemoTerrainAxis", axis_curve)
     bpy.context.scene.collection.objects.link(axis)
 
-    # Optional: keep a manual emitter curve around for reference in the UI (handoff uses generated emitters).
-    curve_data = bpy.data.curves.new("DemoEmitterCurve", type="CURVE")
-    curve_data.dimensions = "3D"
-    spline = curve_data.splines.new("POLY")
-    emitter_points = [
-        (-3.5, 0.05, 4.3),
-        (-2.5, 0.05, 4.15),
-        (-1.5, 0.05, 4.0),
-        (-0.5, 0.05, 4.1),
-        (0.5, 0.05, 4.2),
-        (1.5, 0.05, 4.05),
-        (2.5, 0.05, 4.15),
-        (3.5, 0.05, 4.0),
-    ]
-    spline.points.add(len(emitter_points) - 1)
-    for index, point in enumerate(emitter_points):
-        spline.points[index].co = (*point, 1.0)
-
-    emitter = bpy.data.objects.new("DemoEmitter", curve_data)
-    bpy.context.scene.collection.objects.link(emitter)
-
     camera_data = bpy.data.cameras.new("DemoCamera")
     camera = bpy.data.objects.new("DemoCamera", camera_data)
     camera.location = (0.0, -8.5, 2.4)
@@ -115,17 +106,21 @@ def main() -> None:
 
     settings.preview_steps = 36
     settings.particle_count = 8
-    settings.cache_path = str(ROOT / "cache" / "demo_preview.json")
+    settings.cache_path = str(CACHE_DIR / "demo_preview.json")
     settings.sheet_width = 0.75
-    settings.export_directory = str(ROOT / "exports" / "demo")
+    settings.export_directory = str(EXPORT_DIR)
     settings.export_stem = "demo_waterfall"
     settings.split_guide_object = split_guide
     settings.breakup_region_object = breakup_region
 
     assert bpy.ops.wft.generate_terrace_terrain() == {"FINISHED"}
     assert bpy.ops.wft.use_generated_terrain_for_waterfall() == {"FINISHED"}
+
+    terrain = require_object("WFT_Terrain_MainTerrain")
+    terrain.data.materials.append(create_material("CliffMat", (0.18, 0.20, 0.23, 1.0), roughness=0.8))
+
     assert bpy.ops.wft.generate_preview() == {"FINISHED"}
-    preview = bpy.data.objects["WFT_PreviewPaths"]
+    preview = require_object("WFT_PreviewPaths")
     preview.data.bevel_depth = 0.03
     preview.data.bevel_resolution = 3
     preview.data.materials.append(create_material("PreviewMat", (0.12, 0.55, 1.0, 1.0), roughness=0.2))
@@ -133,7 +128,7 @@ def main() -> None:
     assert bpy.ops.wft.bake_preview() == {"FINISHED"}
     assert bpy.ops.wft.rebuild_waterfall() == {"FINISHED"}
 
-    ribbon = bpy.data.objects["WFT_MainSheet"]
+    ribbon = require_object("WFT_MainSheet")
     ribbon.location.y = -0.06
     ribbon.data.materials.append(create_material("RibbonMat", (0.25, 0.74, 0.97, 1.0), roughness=0.15))
 

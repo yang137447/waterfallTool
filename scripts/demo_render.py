@@ -15,6 +15,14 @@ import waterfall_tool
 
 OUTPUT_DIR = ROOT / "exports" / "demo"
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+CACHE_DIR = ROOT / "cache"
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def require_object(name: str) -> bpy.types.Object:
+    obj = bpy.data.objects.get(name)
+    assert obj is not None, f"Required object '{name}' not found. Scene generation likely failed."
+    return obj
 
 
 def clear_scene() -> None:
@@ -105,7 +113,7 @@ def main() -> None:
 
     settings.preview_steps = 36
     settings.particle_count = 8
-    settings.cache_path = str(ROOT / "cache" / "demo_preview.json")
+    settings.cache_path = str(CACHE_DIR / "demo_preview.json")
     settings.sheet_width = 0.75
     settings.export_directory = str(OUTPUT_DIR)
     settings.export_stem = "demo_waterfall"
@@ -120,11 +128,11 @@ def main() -> None:
     assert bpy.ops.wft.generate_terrace_terrain() == {"FINISHED"}
     assert bpy.ops.wft.use_generated_terrain_for_waterfall() == {"FINISHED"}
 
-    terrain = bpy.data.objects["WFT_Terrain_MainTerrain"]
+    terrain = require_object("WFT_Terrain_MainTerrain")
     terrain.data.materials.append(create_material("CliffMat", (0.18, 0.20, 0.23, 1.0), roughness=0.8))
 
     assert bpy.ops.wft.generate_preview() == {"FINISHED"}
-    preview = bpy.data.objects["WFT_PreviewPaths"]
+    preview = require_object("WFT_PreviewPaths")
     preview.data.bevel_depth = 0.03
     preview.data.bevel_resolution = 3
     preview.data.materials.append(create_material("PreviewMat", (0.12, 0.55, 1.0, 1.0), roughness=0.2))
@@ -134,11 +142,12 @@ def main() -> None:
     assert bpy.ops.wft.bake_preview() == {"FINISHED"}
     assert bpy.ops.wft.rebuild_waterfall() == {"FINISHED"}
 
-    if "WFT_PreviewPaths" in bpy.data.objects:
-        bpy.data.objects["WFT_PreviewPaths"].hide_render = True
-        bpy.data.objects["WFT_PreviewPaths"].hide_viewport = True
+    preview = bpy.data.objects.get("WFT_PreviewPaths")
+    if preview is not None:
+        preview.hide_render = True
+        preview.hide_viewport = True
 
-    ribbon = bpy.data.objects["WFT_MainSheet"]
+    ribbon = require_object("WFT_MainSheet")
     ribbon.data.materials.append(create_material("RibbonMat", (0.25, 0.74, 0.97, 1.0), roughness=0.15))
     ribbon.location.y = -0.06
 
