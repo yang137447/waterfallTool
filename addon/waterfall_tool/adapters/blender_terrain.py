@@ -70,7 +70,7 @@ def _remove_collection_if_present(scene: bpy.types.Scene, name: str) -> None:
     bpy.data.collections.remove(col)
 
 
-DEFAULT_OVERRIDE_CONTINUITY_SEGMENTS = ((0.0, 1.0),)  # Override curves inherit the generator’s full continuity span for compatibility.
+DEFAULT_OVERRIDE_CONTINUITY_SEGMENTS = ((0.0, 1.0),)  # Overrides reuse the generator’s full continuity span so manual edits stay compatible with generated lips.
 
 
 def _level_index_from_float(value: float) -> int | None:
@@ -105,6 +105,7 @@ def read_lip_overrides(collection: bpy.types.Collection | None) -> dict[int, Lip
         return {}
 
     overrides: dict[int, LipCurveDraft] = {}
+    # Sorting by name makes duplicate `level_index` overrides deterministic (earliest name wins).
     for obj in sorted(collection.objects, key=lambda item: item.name or ""):
         if obj.type != "CURVE":
             continue
