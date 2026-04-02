@@ -105,7 +105,7 @@ def read_lip_overrides(collection: bpy.types.Collection | None) -> dict[int, Lip
         return {}
 
     overrides: dict[int, LipCurveDraft] = {}
-    # Sorting by name makes duplicate `level_index` overrides deterministic (earliest name wins).
+    # Sorting by name makes duplicate `level_index` overrides deterministic (later names override earlier ones).
     for obj in sorted(collection.objects, key=lambda item: item.name or ""):
         if obj.type != "CURVE":
             continue
