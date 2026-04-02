@@ -28,3 +28,4 @@ class WFT_Settings(bpy.types.PropertyGroup):
     terrain_total_drop: bpy.props.FloatProperty(name="Terrain Total Drop", default=6.0, min=2.0, max=20.0)
     terrain_base_width: bpy.props.FloatProperty(name="Terrain Base Width", default=8.0, min=2.0, max=30.0)
     terrain_depth: bpy.props.FloatProperty(name="Terrain Depth", default=2.8, min=0.5, max=10.0)
+    terrain_override_collection: bpy.props.PointerProperty(name="Terrain Overrides", type=bpy.types.Collection)

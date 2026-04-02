@@ -7,7 +7,8 @@ from ..terrain.blueprint import build_terrace_levels
 from ..terrain.emitters import build_suggested_emitters
 from ..terrain.layout import build_blocker_masses, build_gap_segments, build_lip_curves
 from ..terrain.mesh import build_main_terrain_mesh
-from ..terrain.types import TerrainBlueprint
+from ..terrain.overrides import apply_lip_overrides
+from ..terrain.types import LipCurveDraft, TerrainBlueprint
 
 DEFAULT_WIDTH_DECAY = 0.1
 DEFAULT_DEPTH_DECAY = 0.12
@@ -65,6 +66,43 @@ def _remove_collection_if_present(scene: bpy.types.Scene, name: str) -> None:
             scene.collection.children.unlink(col)
             break
     bpy.data.collections.remove(col)
+
+
+def read_lip_overrides(collection: bpy.types.Collection | None) -> dict[int, LipCurveDraft]:
+    if collection is None:
+        return {}
+
+    overrides: dict[int, LipCurveDraft] = {}
+    for obj in collection.objects:
+        if obj.type != "CURVE":
+            continue
+
+        level_index = int(obj.get("wft_level_index", -1))
+        if level_index < 0:
+            continue
+
+        data = getattr(obj, "data", None)
+        if data is None or not getattr(data, "splines", None):
+            continue
+
+        spline = data.splines[0]
+        raw_points = getattr(spline, "bezier_points", None)
+        if raw_points is None:
+            raw_points = getattr(spline, "points", None)
+        if not raw_points:
+            continue
+
+        matrix = obj.matrix_world
+        points = tuple(tuple(matrix @ mathutils.Vector(point.co[:3])) for point in raw_points)
+
+        overrides[level_index] = LipCurveDraft(
+            level_index=level_index,
+            points=points,
+            continuity_segments=((0.0, 1.0),),
+            overridden=True,
+        )
+
+    return overrides
 
 
 def _delete_generated_outputs(outputs: list[bpy.types.Object]) -> None:
@@ -197,6 +235,8 @@ def create_terrain_objects(context: bpy.types.Context, settings) -> None:
     blueprint = build_blueprint_from_scene(settings)
     levels = build_terrace_levels(blueprint)
     lips = build_lip_curves(levels, blueprint)
+    overrides = read_lip_overrides(settings.terrain_override_collection)
+    lips = apply_lip_overrides(lips, overrides)
     gaps = build_gap_segments(lips, blueprint)
     blockers = build_blocker_masses(levels, lips, gaps, blueprint)
     mesh_payload = build_main_terrain_mesh(levels, lips, blockers)
