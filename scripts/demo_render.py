@@ -55,40 +55,21 @@ def create_demo_scene():
     background.inputs["Color"].default_value = (0.88, 0.93, 0.98, 1.0)
     background.inputs["Strength"].default_value = 0.9
 
-    cliff_mesh = bpy.data.meshes.new("DemoCliffMesh")
-    cliff_mesh.from_pydata(
-        [
-            (-4.5, 0.0, 5.0),
-            (4.5, 0.0, 5.0),
-            (4.5, 0.0, -4.0),
-            (-4.5, 0.0, -4.0),
-        ],
-        [],
-        [(0, 1, 2, 3)],
-    )
-    cliff = bpy.data.objects.new("DemoCliff", cliff_mesh)
-    cliff.data.materials.append(create_material("CliffMat", (0.18, 0.20, 0.23, 1.0), roughness=0.8))
-    bpy.context.scene.collection.objects.link(cliff)
-
-    curve_data = bpy.data.curves.new("DemoEmitterCurve", type="CURVE")
-    curve_data.dimensions = "3D"
-    spline = curve_data.splines.new("POLY")
-    emitter_points = [
-        (-3.5, 0.05, 4.3),
-        (-2.5, 0.05, 4.15),
-        (-1.5, 0.05, 4.0),
-        (-0.5, 0.05, 4.1),
-        (0.5, 0.05, 4.2),
-        (1.5, 0.05, 4.05),
-        (2.5, 0.05, 4.15),
-        (3.5, 0.05, 4.0),
+    # Terrace terrain axis (required by wft.generate_terrace_terrain poll).
+    axis_curve = bpy.data.curves.new("DemoTerrainAxisCurve", type="CURVE")
+    axis_curve.dimensions = "3D"
+    axis_spline = axis_curve.splines.new("POLY")
+    axis_points = [
+        (-4.0, 0.0, 4.6),
+        (0.0, 0.0, 4.75),
+        (4.0, 0.0, 4.55),
     ]
-    spline.points.add(len(emitter_points) - 1)
-    for index, point in enumerate(emitter_points):
-        spline.points[index].co = (*point, 1.0)
+    axis_spline.points.add(len(axis_points) - 1)
+    for index, point in enumerate(axis_points):
+        axis_spline.points[index].co = (*point, 1.0)
 
-    emitter = bpy.data.objects.new("DemoEmitter", curve_data)
-    bpy.context.scene.collection.objects.link(emitter)
+    axis = bpy.data.objects.new("DemoTerrainAxis", axis_curve)
+    bpy.context.scene.collection.objects.link(axis)
 
     camera_data = bpy.data.cameras.new("DemoCamera")
     camera = bpy.data.objects.new("DemoCamera", camera_data)
@@ -103,7 +84,7 @@ def create_demo_scene():
     sun.rotation_euler = (math.radians(50), math.radians(0), math.radians(25))
     bpy.context.scene.collection.objects.link(sun)
 
-    return emitter, cliff
+    return axis
 
 
 def render_image(path: Path) -> None:
@@ -112,15 +93,19 @@ def render_image(path: Path) -> None:
 
 
 def main() -> None:
-    emitter, cliff = create_demo_scene()
+    axis = create_demo_scene()
     waterfall_tool.register()
 
     settings = bpy.context.scene.wft_settings
-    settings.emitter_object = emitter
-    settings.collider_object = cliff
+    settings.terrain_axis_object = axis
+    settings.terrain_level_count = 3
+    settings.terrain_total_drop = 6.0
+    settings.terrain_base_width = 8.0
+    settings.terrain_depth = 2.8
+
     settings.preview_steps = 36
     settings.particle_count = 8
-    settings.cache_path = str(OUTPUT_DIR / "demo_cache.json")
+    settings.cache_path = str(ROOT / "cache" / "demo_preview.json")
     settings.sheet_width = 0.75
     settings.export_directory = str(OUTPUT_DIR)
     settings.export_stem = "demo_waterfall"
@@ -132,8 +117,13 @@ def main() -> None:
     settings.split_guide_object = split_guide
     settings.breakup_region_object = breakup_region
 
-    result = bpy.ops.wft.generate_preview()
-    assert result == {"FINISHED"}
+    assert bpy.ops.wft.generate_terrace_terrain() == {"FINISHED"}
+    assert bpy.ops.wft.use_generated_terrain_for_waterfall() == {"FINISHED"}
+
+    terrain = bpy.data.objects["WFT_Terrain_MainTerrain"]
+    terrain.data.materials.append(create_material("CliffMat", (0.18, 0.20, 0.23, 1.0), roughness=0.8))
+
+    assert bpy.ops.wft.generate_preview() == {"FINISHED"}
     preview = bpy.data.objects["WFT_PreviewPaths"]
     preview.data.bevel_depth = 0.03
     preview.data.bevel_resolution = 3
@@ -141,10 +131,8 @@ def main() -> None:
 
     render_image(OUTPUT_DIR / "preview.png")
 
-    result = bpy.ops.wft.bake_preview()
-    assert result == {"FINISHED"}
-    result = bpy.ops.wft.rebuild_waterfall()
-    assert result == {"FINISHED"}
+    assert bpy.ops.wft.bake_preview() == {"FINISHED"}
+    assert bpy.ops.wft.rebuild_waterfall() == {"FINISHED"}
 
     if "WFT_PreviewPaths" in bpy.data.objects:
         bpy.data.objects["WFT_PreviewPaths"].hide_render = True

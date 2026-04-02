@@ -51,21 +51,23 @@ def main() -> None:
     background.inputs["Color"].default_value = (0.88, 0.93, 0.98, 1.0)
     background.inputs["Strength"].default_value = 0.9
 
-    cliff_mesh = bpy.data.meshes.new("DemoCliffMesh")
-    cliff_mesh.from_pydata(
-        [
-            (-4.5, 0.0, 5.0),
-            (4.5, 0.0, 5.0),
-            (4.5, 0.0, -4.0),
-            (-4.5, 0.0, -4.0),
-        ],
-        [],
-        [(0, 1, 2, 3)],
-    )
-    cliff = bpy.data.objects.new("DemoCliff", cliff_mesh)
-    cliff.data.materials.append(create_material("CliffMat", (0.18, 0.20, 0.23, 1.0), roughness=0.8))
-    bpy.context.scene.collection.objects.link(cliff)
+    # Terrace terrain axis (required by wft.generate_terrace_terrain poll).
+    axis_curve = bpy.data.curves.new("DemoTerrainAxisCurve", type="CURVE")
+    axis_curve.dimensions = "3D"
+    axis_spline = axis_curve.splines.new("POLY")
+    axis_points = [
+        (-4.0, 0.0, 4.6),
+        (0.0, 0.0, 4.75),
+        (4.0, 0.0, 4.55),
+    ]
+    axis_spline.points.add(len(axis_points) - 1)
+    for index, point in enumerate(axis_points):
+        axis_spline.points[index].co = (*point, 1.0)
 
+    axis = bpy.data.objects.new("DemoTerrainAxis", axis_curve)
+    bpy.context.scene.collection.objects.link(axis)
+
+    # Optional: keep a manual emitter curve around for reference in the UI (handoff uses generated emitters).
     curve_data = bpy.data.curves.new("DemoEmitterCurve", type="CURVE")
     curve_data.dimensions = "3D"
     spline = curve_data.splines.new("POLY")
@@ -105,8 +107,12 @@ def main() -> None:
     bpy.context.scene.collection.objects.link(breakup_region)
 
     settings = scene.wft_settings
-    settings.emitter_object = emitter
-    settings.collider_object = cliff
+    settings.terrain_axis_object = axis
+    settings.terrain_level_count = 3
+    settings.terrain_total_drop = 6.0
+    settings.terrain_base_width = 8.0
+    settings.terrain_depth = 2.8
+
     settings.preview_steps = 36
     settings.particle_count = 8
     settings.cache_path = str(ROOT / "cache" / "demo_preview.json")
@@ -116,27 +122,29 @@ def main() -> None:
     settings.split_guide_object = split_guide
     settings.breakup_region_object = breakup_region
 
-    result = bpy.ops.wft.generate_preview()
-    assert result == {"FINISHED"}
+    assert bpy.ops.wft.generate_terrace_terrain() == {"FINISHED"}
+    assert bpy.ops.wft.use_generated_terrain_for_waterfall() == {"FINISHED"}
+    assert bpy.ops.wft.generate_preview() == {"FINISHED"}
     preview = bpy.data.objects["WFT_PreviewPaths"]
     preview.data.bevel_depth = 0.03
     preview.data.bevel_resolution = 3
     preview.data.materials.append(create_material("PreviewMat", (0.12, 0.55, 1.0, 1.0), roughness=0.2))
 
-    result = bpy.ops.wft.bake_preview()
-    assert result == {"FINISHED"}
-    result = bpy.ops.wft.rebuild_waterfall()
-    assert result == {"FINISHED"}
+    assert bpy.ops.wft.bake_preview() == {"FINISHED"}
+    assert bpy.ops.wft.rebuild_waterfall() == {"FINISHED"}
 
     ribbon = bpy.data.objects["WFT_MainSheet"]
     ribbon.location.y = -0.06
     ribbon.data.materials.append(create_material("RibbonMat", (0.25, 0.74, 0.97, 1.0), roughness=0.15))
 
-    for area in bpy.context.screen.areas:
-        if area.type == "VIEW_3D":
-            for space in area.spaces:
-                if space.type == "VIEW_3D":
-                    space.shading.type = "MATERIAL"
+    # Background renders have no screen; guard for UI usage.
+    screen = getattr(bpy.context, "screen", None)
+    if screen is not None:
+        for area in screen.areas:
+            if area.type == "VIEW_3D":
+                for space in area.spaces:
+                    if space.type == "VIEW_3D":
+                        space.shading.type = "MATERIAL"
 
     print("Waterfall demo scene loaded.")
 
