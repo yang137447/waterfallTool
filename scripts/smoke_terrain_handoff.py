@@ -13,6 +13,8 @@ from waterfall_tool.adapters.blender_terrain import GENERATED_TAG_KEY, GENERATED
 from waterfall_tool.terrain.emitters import choose_handoff_emitter_name  # noqa: E402
 from waterfall_tool.terrain.types import SuggestedEmitter  # noqa: E402
 
+import mathutils  # noqa: E402
+
 curve_data = bpy.data.curves.new("TerrainAxis", type="CURVE")
 curve_data.dimensions = "3D"
 spline = curve_data.splines.new("POLY")
@@ -29,10 +31,13 @@ settings.terrain_axis_object = axis
 assert bpy.ops.wft.generate_terrace_terrain() == {"FINISHED"}
 
 generated_collection = bpy.data.collections.get(GENERATED_TERRAIN_COLLECTION_NAME)
-generated_collection = next(
-    (child for child in bpy.context.scene.collection.children if child.name == GENERATED_TERRAIN_COLLECTION_NAME),
-    generated_collection,
-)
+stack = [bpy.context.scene.collection]
+while stack and (generated_collection is None or generated_collection.name != GENERATED_TERRAIN_COLLECTION_NAME):
+    collection = stack.pop()
+    if collection.name == GENERATED_TERRAIN_COLLECTION_NAME:
+        generated_collection = collection
+        break
+    stack.extend(list(collection.children))
 assert generated_collection is not None
 tagged_objects = {obj.name: obj for obj in generated_collection.objects if obj.get(GENERATED_TAG_KEY, False)}
 expected_terrain = tagged_objects.get("WFT_Terrain_MainTerrain")
@@ -51,10 +56,23 @@ object_names: list[str] = []
 for obj in sorted(emitter_objects, key=lambda item: int(item.get("wft_emitter_index", -1))):
     assert "wft_strength" in obj, "Missing emitter strength metadata"
     assert "wft_level_index" in obj, "Missing emitter level_index metadata"
+
+    points = []
+    spline = obj.data.splines[0]
+    if spline.type == "BEZIER":
+        raw_points = getattr(spline, "bezier_points", None) or []
+        for point in raw_points:
+            points.append(tuple(obj.matrix_world @ mathutils.Vector(point.co[:3])))
+    else:
+        raw_points = getattr(spline, "points", None) or []
+        for point in raw_points:
+            points.append(tuple(obj.matrix_world @ mathutils.Vector(point.co[:3])))
+    assert len(points) >= 2, f"Expected >=2 points for {obj.name}, got {len(points)}"
+
     emitters.append(
         SuggestedEmitter(
             level_index=int(obj["wft_level_index"]),
-            points=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)],
+            points=points,
             strength=float(obj["wft_strength"]),
             enabled=True,
         )
