@@ -63,3 +63,18 @@ class BlockerMass:
     height: float
     forward_offset: float
     manual: bool
+
+
+@dataclass(frozen=True)
+class TerrainMeshPayload:
+    vertices: list[Vec3]
+    faces: list[tuple[int, int, int, int]]
+    level_ids: list[int]
+
+
+@dataclass(frozen=True)
+class SuggestedEmitter:
+    level_index: int
+    points: list[Vec3]
+    strength: float
+    enabled: bool
