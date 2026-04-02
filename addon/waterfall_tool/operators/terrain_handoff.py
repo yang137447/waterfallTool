@@ -55,6 +55,12 @@ def _read_curve_world_points(obj: bpy.types.Object) -> list[tuple[float, float, 
 class WFT_OT_UseGeneratedTerrainForWaterfall(bpy.types.Operator):
     bl_idname = "wft.use_generated_terrain_for_waterfall"
     bl_label = "Use Terrain For Waterfall"
+    bl_options = {"REGISTER", "UNDO"}
+
+    @classmethod
+    def poll(cls, context):
+        scene = getattr(context, "scene", None)
+        return scene is not None and hasattr(scene, "wft_settings")
 
     def execute(self, context):
         settings = context.scene.wft_settings

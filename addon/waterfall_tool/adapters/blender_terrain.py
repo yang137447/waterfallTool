@@ -22,6 +22,9 @@ DEFAULT_SEED = 7
 GENERATED_TERRAIN_COLLECTION_NAME = "WFT_Terrain_Generated"
 TEMP_COLLECTION_NAME = "WFT_Terrain_Generated__temp"
 GENERATED_TAG_KEY = "wft_generated_terrain"
+COLLECTION_ROLE_KEY = "wft_collection_role"
+COLLECTION_ROLE_GENERATED = "generated_terrain"
+COLLECTION_ROLE_TEMP = "generated_terrain_temp"
 
 
 def read_axis_points(axis_object: bpy.types.Object) -> list[tuple[float, float, float]]:
@@ -40,34 +43,157 @@ def read_axis_points(axis_object: bpy.types.Object) -> list[tuple[float, float, 
         if not getattr(spline, "bezier_points", None) or len(spline.bezier_points) < 2:
             raise ValueError("Terrain axis Bezier spline must have at least 2 bezier points")
         points = [mathutils.Vector(point.co[:3]) for point in spline.bezier_points]
-    elif spline_type in {"POLY", "NURBS"}:
+    elif spline_type == "POLY":
         if not getattr(spline, "points", None) or len(spline.points) < 2:
-            raise ValueError(f"Terrain axis {spline_type} spline must have at least 2 points")
+            raise ValueError("Terrain axis Poly spline must have at least 2 points")
         points = [mathutils.Vector(point.co[:3]) for point in spline.points]
+    elif spline_type == "NURBS":
+        # NURBS points are 4D (x, y, z, w) with weights; treating them as plain XYZ produces
+        # unintuitive results. Reject explicitly to avoid silently generating the wrong terrain.
+        raise ValueError("Terrain axis NURBS splines are not supported. Convert the curve to Poly or Bezier.")
     else:
-        raise ValueError(f"Unsupported terrain axis spline type: {spline_type!r} (use Poly, Nurbs, or Bezier)")
+        raise ValueError(f"Unsupported terrain axis spline type: {spline_type!r} (use Poly or Bezier)")
 
     return [tuple(axis_object.matrix_world @ point) for point in points]
 
 
-def _ensure_collection(scene: bpy.types.Scene, name: str) -> bpy.types.Collection:
-    existing = bpy.data.collections.get(name)
+def _iter_collection_tree(root: bpy.types.Collection) -> list[bpy.types.Collection]:
+    stack = [root]
+    seen: set[int] = set()
+    ordered: list[bpy.types.Collection] = []
+    while stack:
+        col = stack.pop()
+        try:
+            ptr = col.as_pointer()
+        except Exception:
+            ptr = id(col)
+        if ptr in seen:
+            continue
+        seen.add(ptr)
+        ordered.append(col)
+        stack.extend(list(col.children))
+    return ordered
+
+
+def _find_scene_collection(
+    scene: bpy.types.Scene, *, role: str | None = None, name: str | None = None
+) -> bpy.types.Collection | None:
+    """Find a collection within this scene's collection tree.
+
+    Avoids global name-based lookups via bpy.data.collections.get(name), which can return unrelated
+    collections from other scenes/files and make cleanup unsafe.
+    """
+    candidates = _iter_collection_tree(scene.collection)
+    if role is not None:
+        for col in candidates:
+            if col.get(COLLECTION_ROLE_KEY) == role:
+                return col
+    if name is not None:
+        for col in candidates:
+            if col.name == name:
+                return col
+    return None
+
+
+def _unlink_from_all_scene_parents(scene: bpy.types.Scene, target: bpy.types.Collection) -> None:
+    """Unlink `target` from any parent collections that are part of this scene."""
+    for parent in _iter_collection_tree(scene.collection):
+        try:
+            if target in parent.children:
+                parent.children.unlink(target)
+        except Exception:
+            # Collection may already be unlinked or invalid.
+            pass
+
+
+def _safe_remove_collection(scene: bpy.types.Scene, target: bpy.types.Collection) -> None:
+    """Best-effort unlink + remove that must not raise (especially from finally blocks)."""
+    try:
+        _unlink_from_all_scene_parents(scene, target)
+    except Exception:
+        pass
+
+    try:
+        bpy.data.collections.remove(target)
+    except Exception:
+        # If Blender refuses to remove (users, invalid reference, etc), keep going.
+        pass
+
+
+def _is_safe_temp_collection(col: bpy.types.Collection) -> bool:
+    if col.get(COLLECTION_ROLE_KEY) == COLLECTION_ROLE_TEMP:
+        return True
+    if col.name != TEMP_COLLECTION_NAME and not col.name.startswith(f"{TEMP_COLLECTION_NAME}."):
+        return False
+    # Refuse to touch unexpected child collections (too risky).
+    if len(col.children) > 0:
+        return False
+    # Only remove if it contains objects that look like our staging outputs.
+    for obj in list(col.objects):
+        if obj.get(GENERATED_TAG_KEY, False):
+            continue
+        if (obj.name or "").startswith("WFT_Terrain__TMP_"):
+            continue
+        return False
+    return True
+
+
+def _cleanup_legacy_temp_collections(scene: bpy.types.Scene) -> None:
+    """Remove temp collections created by prior runs (best-effort, scene-scoped, non-raising)."""
+    try:
+        collections = _iter_collection_tree(scene.collection)
+    except Exception:
+        return
+
+    # Skip the root scene collection; only consider linked children.
+    for col in collections[1:]:
+        if not _is_safe_temp_collection(col):
+            continue
+        _safe_remove_collection(scene, col)
+
+
+def _ensure_generated_collection(scene: bpy.types.Scene) -> bpy.types.Collection:
+    existing = _find_scene_collection(scene, role=COLLECTION_ROLE_GENERATED)
     if existing is None:
-        existing = bpy.data.collections.new(name)
-    if existing.name not in {child.name for child in scene.collection.children}:
+        existing = _find_scene_collection(scene, name=GENERATED_TERRAIN_COLLECTION_NAME)
+        if existing is not None:
+            # Upgrade legacy collection so future lookups stay scene-scoped + role-based.
+            try:
+                existing[COLLECTION_ROLE_KEY] = COLLECTION_ROLE_GENERATED
+            except Exception:
+                pass
+    if existing is None:
+        existing = bpy.data.collections.new(GENERATED_TERRAIN_COLLECTION_NAME)
+        try:
+            existing[COLLECTION_ROLE_KEY] = COLLECTION_ROLE_GENERATED
+        except Exception:
+            pass
         scene.collection.children.link(existing)
     return existing
 
 
-def _remove_collection_if_present(scene: bpy.types.Scene, name: str) -> None:
-    col = bpy.data.collections.get(name)
-    if col is None:
+def _create_temp_collection(scene: bpy.types.Scene) -> bpy.types.Collection:
+    temp = bpy.data.collections.new(TEMP_COLLECTION_NAME)
+    try:
+        temp[COLLECTION_ROLE_KEY] = COLLECTION_ROLE_TEMP
+    except Exception:
+        pass
+    scene.collection.children.link(temp)
+    return temp
+
+
+def _safe_cleanup_temp_collection(scene: bpy.types.Scene, temp_collection: bpy.types.Collection | None) -> None:
+    if temp_collection is None:
         return
-    for child in list(scene.collection.children):
-        if child == col:
-            scene.collection.children.unlink(col)
-            break
-    bpy.data.collections.remove(col)
+    try:
+        for obj in list(temp_collection.objects):
+            try:
+                temp_collection.objects.unlink(obj)
+            except Exception:
+                pass
+    except Exception:
+        pass
+    _safe_remove_collection(scene, temp_collection)
 
 
 DEFAULT_OVERRIDE_CONTINUITY_SEGMENTS = ((0.0, 1.0),)  # Overrides reuse the generator’s full continuity span so manual edits stay compatible with generated lips.
@@ -276,12 +402,12 @@ def create_terrain_objects(context: bpy.types.Context, settings) -> None:
     emitters = build_suggested_emitters(lips, gaps)
 
     scene = context.scene
-    generated_collection = _ensure_collection(scene, GENERATED_TERRAIN_COLLECTION_NAME)
+    generated_collection = _ensure_generated_collection(scene)
     old_outputs = [obj for obj in list(generated_collection.objects) if obj.get(GENERATED_TAG_KEY, False)]
 
     # Clean up any prior temp collection up front (safe: it's not part of approved outputs).
-    _remove_collection_if_present(scene, TEMP_COLLECTION_NAME)
-    temp_collection = _ensure_collection(scene, TEMP_COLLECTION_NAME)
+    _cleanup_legacy_temp_collections(scene)
+    temp_collection = _create_temp_collection(scene)
 
     try:
         mesh = bpy.data.meshes.new("WFT_Terrain__TMP_MainTerrainMesh")
@@ -369,5 +495,5 @@ def create_terrain_objects(context: bpy.types.Context, settings) -> None:
         raise
 
     finally:
-        # Ensure the temp staging collection is always cleaned up.
-        _remove_collection_if_present(scene, TEMP_COLLECTION_NAME)
+        # Ensure the temp staging collection is always cleaned up (must not raise and mask errors).
+        _safe_cleanup_temp_collection(scene, temp_collection)

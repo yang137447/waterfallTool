@@ -27,6 +27,7 @@ class WFT_PT_MainPanel(bpy.types.Panel):
         terrain_box = layout.box()
         terrain_box.label(text="Terrain Generator")
         terrain_box.prop(settings, "terrain_axis_object")
+        terrain_box.prop(settings, "terrain_override_collection")
         terrain_box.prop(settings, "terrain_level_count")
         terrain_box.prop(settings, "terrain_total_drop")
         terrain_box.prop(settings, "terrain_base_width")
