@@ -26,8 +26,15 @@ settings.terrain_axis_object = axis
 
 result = bpy.ops.wft.generate_terrace_terrain()
 assert result == {"FINISHED"}
-assert bpy.data.objects.get("WFT_Terrain_MainTerrain") is not None
-assert bpy.data.objects.get("WFT_Terrain_SuggestedEmitter_00") is not None
+terrain = bpy.data.objects.get("WFT_Terrain_MainTerrain")
+emitter0 = bpy.data.objects.get("WFT_Terrain_SuggestedEmitter_00")
+assert terrain is not None
+assert emitter0 is not None
+
+generated = bpy.data.collections.get("WFT_Terrain_Generated")
+assert generated is not None
+assert terrain.name in [obj.name for obj in generated.objects]
+assert bool(terrain.get("wft_generated_terrain")) is True
 
 # Repeated generation should not accumulate .001 duplicates.
 result = bpy.ops.wft.generate_terrace_terrain()

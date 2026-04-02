@@ -87,6 +87,72 @@ def _cleanup_generated_collection_outputs(collection: bpy.types.Collection) -> N
             pass
 
 
+def _delete_generated_outputs(outputs: list[bpy.types.Object]) -> None:
+    for obj in list(outputs):
+        if not obj.get(GENERATED_TAG_KEY, False):
+            continue
+
+        data = getattr(obj, "data", None)
+        bpy.data.objects.remove(obj, do_unlink=True)
+        if data is None:
+            continue
+        try:
+            if hasattr(data, "users") and data.users == 0:
+                if isinstance(data, bpy.types.Mesh):
+                    bpy.data.meshes.remove(data)
+                elif isinstance(data, bpy.types.Curve):
+                    bpy.data.curves.remove(data)
+        except ReferenceError:
+            pass
+
+
+def _backup_rename_outputs(outputs: list[bpy.types.Object]) -> list[tuple[bpy.types.Object, str, str | None]]:
+    renamed: list[tuple[bpy.types.Object, str, str | None]] = []
+    for obj in outputs:
+        old_name = obj.name
+        old_data_name = getattr(getattr(obj, "data", None), "name", None)
+
+        # Choose a unique backup name to avoid collisions.
+        suffix = 0
+        while True:
+            candidate = f"{old_name}__OLD__{suffix:02d}"
+            if bpy.data.objects.get(candidate) is None:
+                break
+            suffix += 1
+        obj.name = candidate
+
+        if getattr(obj, "data", None) is not None and old_data_name is not None:
+            data = obj.data
+            data_suffix = 0
+            while True:
+                data_candidate = f"{old_data_name}__OLD__{data_suffix:02d}"
+                # Curves and meshes live in separate name spaces; only check the relevant datablock type.
+                if isinstance(data, bpy.types.Mesh):
+                    exists = bpy.data.meshes.get(data_candidate) is not None
+                elif isinstance(data, bpy.types.Curve):
+                    exists = bpy.data.curves.get(data_candidate) is not None
+                else:
+                    exists = False
+                if not exists:
+                    break
+                data_suffix += 1
+            data.name = data_candidate
+
+        renamed.append((obj, old_name, old_data_name))
+    return renamed
+
+
+def _restore_output_names(renamed: list[tuple[bpy.types.Object, str, str | None]]) -> None:
+    for obj, original_name, original_data_name in renamed:
+        try:
+            obj.name = original_name
+            if getattr(obj, "data", None) is not None and original_data_name is not None:
+                obj.data.name = original_data_name
+        except ReferenceError:
+            # Object/data may have been removed elsewhere; ignore.
+            pass
+
+
 def build_blueprint_from_scene(settings) -> TerrainBlueprint:
     axis_points = read_axis_points(settings.terrain_axis_object)
     top_elevation = max(point[2] for point in axis_points)
@@ -142,23 +208,46 @@ def create_terrain_objects(context: bpy.types.Context, settings) -> None:
         emitter_object[GENERATED_TAG_KEY] = True
         temp_collection.objects.link(emitter_object)
 
-    # Replace outputs: only now do we remove prior generated outputs and promote temp outputs.
-    _cleanup_generated_collection_outputs(generated_collection)
+    # Replace outputs transactionally:
+    # 1) stage new objects (link + rename) while keeping old outputs intact (but renamed aside)
+    # 2) only delete the old tagged outputs after the new ones have their final names and are linked
+    old_outputs = [obj for obj in list(generated_collection.objects) if obj.get(GENERATED_TAG_KEY, False)]
+    backup_map: list[tuple[bpy.types.Object, str, str | None]] = []
+    promoted_objects: list[bpy.types.Object] = []
 
-    for obj in list(temp_collection.objects):
-        # Move to the generated collection and rename to stable final names.
-        generated_collection.objects.link(obj)
-        temp_collection.objects.unlink(obj)
-        if obj.name == "WFT_Terrain__TMP_MainTerrain":
-            obj.name = "WFT_Terrain_MainTerrain"
-            if obj.data is not None:
-                obj.data.name = "WFT_Terrain_MainTerrainMesh"
-        elif obj.name.startswith("WFT_Terrain__TMP_SuggestedEmitter_"):
-            obj.name = obj.name.replace("WFT_Terrain__TMP_SuggestedEmitter_", "WFT_Terrain_SuggestedEmitter_")
-            if obj.data is not None:
-                obj.data.name = obj.data.name.replace(
-                    "WFT_Terrain__TMP_SuggestedEmitterCurve_",
-                    "WFT_Terrain_SuggestedEmitterCurve_",
-                )
+    try:
+        backup_map = _backup_rename_outputs(old_outputs)
 
+        for obj in list(temp_collection.objects):
+            generated_collection.objects.link(obj)
+            promoted_objects.append(obj)
+
+            if obj.name == "WFT_Terrain__TMP_MainTerrain":
+                obj.name = "WFT_Terrain_MainTerrain"
+                if obj.data is not None:
+                    obj.data.name = "WFT_Terrain_MainTerrainMesh"
+            elif obj.name.startswith("WFT_Terrain__TMP_SuggestedEmitter_"):
+                obj.name = obj.name.replace("WFT_Terrain__TMP_SuggestedEmitter_", "WFT_Terrain_SuggestedEmitter_")
+                if obj.data is not None:
+                    obj.data.name = obj.data.name.replace(
+                        "WFT_Terrain__TMP_SuggestedEmitterCurve_",
+                        "WFT_Terrain_SuggestedEmitterCurve_",
+                    )
+
+        for obj in list(temp_collection.objects):
+            temp_collection.objects.unlink(obj)
+
+    except Exception:
+        # Best-effort rollback: unlink any staged temp objects, and restore old names.
+        for obj in promoted_objects:
+            try:
+                if obj.name in {o.name for o in generated_collection.objects}:
+                    generated_collection.objects.unlink(obj)
+            except Exception:
+                pass
+        _restore_output_names(backup_map)
+        raise
+
+    # Now it is safe to delete the old outputs (they are no longer needed and the new outputs are in place).
+    _delete_generated_outputs(old_outputs)
     _remove_collection_if_present(scene, TEMP_COLLECTION_NAME)
