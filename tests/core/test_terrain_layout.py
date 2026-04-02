@@ -1,8 +1,10 @@
+import pytest
+
 from pytest import approx
 
 from waterfall_tool.terrain.blueprint import build_terrace_levels
 from waterfall_tool.terrain.layout import build_blocker_masses, build_gap_segments, build_lip_curves
-from waterfall_tool.terrain.types import TerrainBlueprint
+from waterfall_tool.terrain.types import LipCurveDraft, TerrainBlueprint
 
 
 def test_layout_generation_creates_lips_gaps_and_blockers():
@@ -69,3 +71,29 @@ def test_gap_segments_produces_single_gap_for_two_levels():
     assert len(lips) == 2
     assert len(gaps) == 1
     assert gaps[0].level_index == 1
+
+
+def test_blocker_masses_requires_matching_lip_levels():
+    blueprint = TerrainBlueprint(
+        axis_points=[(-4.0, 0.0, 4.0), (0.0, 0.0, 2.5), (4.0, 0.0, 4.0)],
+        level_count=3,
+        top_elevation=4.0,
+        total_drop=6.0,
+        base_width=8.0,
+        terrace_depth=2.8,
+        width_decay=0.1,
+        depth_decay=0.12,
+        lip_roundness=0.4,
+        gap_frequency=0.25,
+        blocker_density=0.3,
+        seed=7,
+    )
+    levels = build_terrace_levels(blueprint)
+    lips = build_lip_curves(levels, blueprint)
+    continuity = lips[1].continuity_segments
+    points = lips[1].points
+    mismatched_lips = [lips[0], LipCurveDraft(level_index=99, points=points, continuity_segments=continuity, overridden=False), lips[2]]
+    gaps = build_gap_segments(lips, blueprint)
+
+    with pytest.raises(ValueError):
+        build_blocker_masses(levels, mismatched_lips, gaps, blueprint)

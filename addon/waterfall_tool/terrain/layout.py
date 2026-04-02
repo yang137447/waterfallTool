@@ -67,6 +67,10 @@ def build_blocker_masses(
         return []
     if len(blueprint.axis_points) < 2:
         raise ValueError("TerrainBlueprint.axis_points must contain at least 2 entries to position blockers")
+    if len(levels) != len(lips):
+        raise ValueError("Blocker generation requires lips for each terrace level")
+    if any(level.level_index != lip.level_index for level, lip in zip(levels, lips)):
+        raise ValueError("Level indices must match between generated levels and lip curves")
 
     axis_mid_y = blueprint.axis_points[1][1]
     density = max(0.0, min(1.0, blueprint.blocker_density))
