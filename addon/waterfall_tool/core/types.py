@@ -31,3 +31,11 @@ class ParticleState:
     attached: bool
     split_score: float
     breakup: float
+
+
+@dataclass(frozen=True)
+class PathPoint:
+    position: Vec3
+    speed: float
+    breakup: float
+    split_score: float

@@ -17,4 +17,6 @@ class WFT_PT_MainPanel(bpy.types.Panel):
         layout.prop(settings, "collider_object")
         layout.prop(settings, "preview_steps")
         layout.prop(settings, "particle_count")
+        layout.prop(settings, "cache_path")
         layout.operator("wft.generate_preview")
+        layout.operator("wft.bake_preview")

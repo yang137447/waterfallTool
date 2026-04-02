@@ -8,3 +8,8 @@ class WFT_Settings(bpy.types.PropertyGroup):
     collider_object: bpy.props.PointerProperty(name="Collider Mesh", type=bpy.types.Object)
     preview_steps: bpy.props.IntProperty(name="Preview Steps", default=24, min=2, max=256)
     particle_count: bpy.props.IntProperty(name="Particle Count", default=24, min=2, max=512)
+    cache_path: bpy.props.StringProperty(
+        name="Cache Path",
+        default="D:/YYBWorkSpace/GitHub/waterfallTool/cache/preview.json",
+        subtype="FILE_PATH",
+    )
