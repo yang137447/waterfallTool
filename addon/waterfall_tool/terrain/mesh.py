@@ -9,10 +9,14 @@ def build_main_terrain_mesh(
     blockers: list[BlockerMass],
 ) -> TerrainMeshPayload:
     _ = blockers
+    if len(levels) != len(lips):
+        raise ValueError("levels and lips lists must have the same length")
     vertices: list[tuple[float, float, float]] = []
     faces: list[tuple[int, int, int, int]] = []
     level_ids: list[int] = []
     for level, lip in zip(levels, lips):
+        if len(lip.points) < 3:
+            raise ValueError("Lip curve points must include at least three vertices")
         back_left = (lip.points[0][0], 2.0 + level.level_index * 0.45, level.elevation + level.terrace_depth)
         back_right = (lip.points[-1][0], 2.0 + level.level_index * 0.45, level.elevation + level.terrace_depth)
         lip_left = lip.points[0]

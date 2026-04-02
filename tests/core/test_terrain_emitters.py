@@ -1,3 +1,5 @@
+import pytest
+
 from waterfall_tool.terrain.emitters import build_suggested_emitters, choose_handoff_emitter
 from waterfall_tool.terrain.types import GapSegment, LipCurveDraft
 
@@ -18,3 +20,9 @@ def test_build_suggested_emitters_skips_gap_segments():
     assert len(emitters) == 2
     assert emitters[0].level_index == 0
     assert choose_handoff_emitter(emitters).level_index == 0
+    assert all(emitter.points for emitter in emitters)
+
+
+def test_choose_handoff_emitter_requires_emitters():
+    with pytest.raises(ValueError, match="suggested emitters"):
+        choose_handoff_emitter([])
