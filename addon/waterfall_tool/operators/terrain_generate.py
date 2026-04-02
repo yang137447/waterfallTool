@@ -28,7 +28,7 @@ class WFT_OT_GenerateTerraceTerrain(bpy.types.Operator):
         if spline_type == "BEZIER":
             bez = getattr(spline, "bezier_points", None)
             return bool(bez) and len(bez) >= 2
-        if spline_type in {"POLY", "NURBS"}:
+        if spline_type == "POLY":
             pts = getattr(spline, "points", None)
             return bool(pts) and len(pts) >= 2
         return False

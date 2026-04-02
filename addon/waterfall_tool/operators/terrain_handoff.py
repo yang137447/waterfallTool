@@ -4,6 +4,8 @@ import bpy
 import mathutils
 
 from ..adapters.blender_terrain import (
+    COLLECTION_ROLE_GENERATED,
+    COLLECTION_ROLE_KEY,
     GENERATED_TAG_KEY,
     GENERATED_TERRAIN_COLLECTION_NAME,
 )
@@ -11,20 +13,52 @@ from ..terrain.emitters import choose_handoff_emitter_name
 from ..terrain.types import SuggestedEmitter
 
 
-def _find_collection_recursive(
-    root: bpy.types.Collection, name: str
-) -> bpy.types.Collection | None:
+def _iter_collection_tree(root: bpy.types.Collection) -> list[bpy.types.Collection]:
     stack = [root]
     seen: set[int] = set()
+    ordered: list[bpy.types.Collection] = []
     while stack:
-        collection = stack.pop()
-        if id(collection) in seen:
+        col = stack.pop()
+        try:
+            ptr = col.as_pointer()
+        except Exception:
+            ptr = id(col)
+        if ptr in seen:
             continue
-        seen.add(id(collection))
-        if collection.name == name:
-            return collection
-        stack.extend(list(collection.children))
+        seen.add(ptr)
+        ordered.append(col)
+        stack.extend(list(col.children))
+    return ordered
+
+
+def _find_generated_collection(root: bpy.types.Collection) -> bpy.types.Collection | None:
+    """Find the generated terrain collection (role-based first, name fallback).
+
+    Terrain generation tags its collection with a role custom property; using that avoids global
+    name-based assumptions and stays consistent across scenes/files.
+    """
+    tree = _iter_collection_tree(root)
+    for col in tree:
+        if col.get(COLLECTION_ROLE_KEY) == COLLECTION_ROLE_GENERATED:
+            return col
+    for col in tree:
+        if col.name == GENERATED_TERRAIN_COLLECTION_NAME:
+            return col
     return None
+
+
+def _safe_int(value) -> int | None:
+    try:
+        return int(value)
+    except Exception:
+        return None
+
+
+def _emitter_sort_key(obj: bpy.types.Object) -> tuple[int, str]:
+    raw = obj.get("wft_emitter_index", None)
+    parsed = _safe_int(raw)
+    # Missing/malformed indexes sort after valid ones, but never throw before validation.
+    return (parsed if parsed is not None else 10**9, obj.name or "")
 
 
 def _read_curve_world_points(obj: bpy.types.Object) -> list[tuple[float, float, float]]:
@@ -60,12 +94,25 @@ class WFT_OT_UseGeneratedTerrainForWaterfall(bpy.types.Operator):
     @classmethod
     def poll(cls, context):
         scene = getattr(context, "scene", None)
-        return scene is not None and hasattr(scene, "wft_settings")
+        if scene is None or not hasattr(scene, "wft_settings"):
+            return False
+        generated_collection = _find_generated_collection(scene.collection)
+        if generated_collection is None:
+            return False
+        tagged_objects = [obj for obj in generated_collection.objects if obj.get(GENERATED_TAG_KEY, False)]
+        if not any(obj.name == "WFT_Terrain_MainTerrain" for obj in tagged_objects):
+            return False
+        if not any(
+            obj.name.startswith("WFT_Terrain_SuggestedEmitter_") and obj.type == "CURVE"
+            for obj in tagged_objects
+        ):
+            return False
+        return True
 
     def execute(self, context):
         settings = context.scene.wft_settings
         scene = context.scene
-        generated_collection = _find_collection_recursive(scene.collection, GENERATED_TERRAIN_COLLECTION_NAME)
+        generated_collection = _find_generated_collection(scene.collection)
         if generated_collection is None:
             self.report({"ERROR"}, "Generate terrain before handoff")
             return {"CANCELLED"}
@@ -87,7 +134,7 @@ class WFT_OT_UseGeneratedTerrainForWaterfall(bpy.types.Operator):
 
         emitters: list[SuggestedEmitter] = []
         object_names: list[str] = []
-        for obj in sorted(emitter_objects, key=lambda item: int(item.get("wft_emitter_index", -1))):
+        for obj in sorted(emitter_objects, key=_emitter_sort_key):
             for required_key in ("wft_emitter_index", "wft_level_index", "wft_strength"):
                 if required_key not in obj:
                     self.report(
@@ -97,6 +144,8 @@ class WFT_OT_UseGeneratedTerrainForWaterfall(bpy.types.Operator):
                     return {"CANCELLED"}
 
             try:
+                # Validate metadata early; sorting must never be the first failure point.
+                _ = int(obj["wft_emitter_index"])
                 points = _read_curve_world_points(obj)
                 level_index = int(obj["wft_level_index"])
                 strength = float(obj["wft_strength"])
