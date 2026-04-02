@@ -32,6 +32,7 @@ class WFT_PT_MainPanel(bpy.types.Panel):
         terrain_box.prop(settings, "terrain_base_width")
         terrain_box.prop(settings, "terrain_depth")
         terrain_box.operator("wft.generate_terrace_terrain")
+        terrain_box.operator("wft.use_generated_terrain_for_waterfall")
 
         layout.operator("wft.generate_preview")
         layout.operator("wft.bake_preview")

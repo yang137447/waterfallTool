@@ -6,6 +6,7 @@ def _load_blender_classes() -> tuple[type, ...]:
     from .operators.export import WFT_OT_ExportWaterfall
     from .operators.preview import WFT_OT_GeneratePreview
     from .operators.rebuild import WFT_OT_RebuildWaterfall
+    from .operators.terrain_handoff import WFT_OT_UseGeneratedTerrainForWaterfall
     from .operators.terrain_generate import WFT_OT_GenerateTerraceTerrain
     from .panel import WFT_PT_MainPanel
     from .properties import WFT_Settings
@@ -16,6 +17,7 @@ def _load_blender_classes() -> tuple[type, ...]:
         WFT_OT_BakePreview,
         WFT_OT_RebuildWaterfall,
         WFT_OT_GenerateTerraceTerrain,
+        WFT_OT_UseGeneratedTerrainForWaterfall,
         WFT_OT_ExportWaterfall,
         WFT_PT_MainPanel,
     )

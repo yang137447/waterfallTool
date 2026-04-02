@@ -54,3 +54,9 @@ def choose_handoff_emitter(emitters: list[SuggestedEmitter]) -> SuggestedEmitter
     if not emitters:
         raise ValueError("No suggested emitters were provided")
     return sorted(emitters, key=lambda emitter: (-emitter.strength, emitter.level_index))[0]
+
+
+def choose_handoff_emitter_name(object_names: list[str], emitters: list[SuggestedEmitter]) -> str:
+    chosen = choose_handoff_emitter(emitters)
+    chosen_index = emitters.index(chosen)
+    return object_names[chosen_index]
