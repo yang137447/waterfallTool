@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 import bpy
 import mathutils
 
@@ -66,6 +68,67 @@ def _remove_collection_if_present(scene: bpy.types.Scene, name: str) -> None:
             scene.collection.children.unlink(col)
             break
     bpy.data.collections.remove(col)
+
+
+DEFAULT_OVERRIDE_CONTINUITY_SEGMENTS = ((0.0, 1.0),)  # Overrides currently reuse full continuity segments for consistency with generated lips.
+
+
+def _parse_level_index(raw_value: Any) -> int | None:
+    if raw_value is None:
+        return None
+    if isinstance(raw_value, int):
+        return raw_value if raw_value >= 0 else None
+    if isinstance(raw_value, float):
+        if not raw_value.is_integer():
+            return None
+        return int(raw_value)
+    if isinstance(raw_value, str):
+        candidate = raw_value.strip()
+        if not candidate:
+            return None
+        try:
+            level_index = int(candidate)
+        except ValueError:
+            return None
+        return level_index if level_index >= 0 else None
+    return None
+
+
+def read_lip_overrides(collection: bpy.types.Collection | None) -> dict[int, LipCurveDraft]:
+    if collection is None:
+        return {}
+
+    overrides: dict[int, LipCurveDraft] = {}
+    for obj in sorted(collection.objects, key=lambda item: item.name or ""):
+        if obj.type != "CURVE":
+            continue
+
+        level_index = _parse_level_index(obj.get("wft_level_index"))
+        if level_index is None:
+            continue
+
+        data = getattr(obj, "data", None)
+        if data is None or not getattr(data, "splines", None):
+            continue
+
+        spline = data.splines[0]
+        raw_points = getattr(spline, "bezier_points", None)
+        if raw_points is None:
+            raw_points = getattr(spline, "points", None)
+        if not raw_points:
+            continue
+
+        matrix = obj.matrix_world
+        points = tuple(tuple(matrix @ mathutils.Vector(point.co[:3])) for point in raw_points)
+
+        overrides[level_index] = LipCurveDraft(
+            level_index=level_index,
+            points=points,
+            continuity_segments=DEFAULT_OVERRIDE_CONTINUITY_SEGMENTS,
+            overridden=True,
+        )
+
+    return overrides
 
 
 def read_lip_overrides(collection: bpy.types.Collection | None) -> dict[int, LipCurveDraft]:
