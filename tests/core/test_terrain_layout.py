@@ -37,6 +37,13 @@ def test_layout_generation_creates_lips_gaps_and_blockers():
     gap_freq = max(0.05, min(1.0, blueprint.gap_frequency))
     assert gaps[0].depth_strength == approx(0.65 * gap_freq)
     assert len(gaps) == len({gap.level_index for gap in gaps})
+    density_scale = 1 + blueprint.blocker_density * 0.4
+    expected_width = 1.4 * density_scale
+    expected_height = 1.1 + blueprint.blocker_density * 0.2
+    expected_forward = -0.55 - len(gaps) * 0.05
+    assert blockers[0].width == approx(expected_width)
+    assert blockers[0].height == approx(expected_height)
+    assert blockers[0].forward_offset == approx(expected_forward)
 
 
 def test_gap_segments_produces_single_gap_for_two_levels():

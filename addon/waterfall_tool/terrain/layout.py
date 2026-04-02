@@ -11,6 +11,7 @@ def build_lip_curves(levels: list[TerraceLevel], blueprint: TerrainBlueprint) ->
     roundness = max(0.1, min(1.0, blueprint.lip_roundness))
     first_end = 0.32 + 0.08 * roundness
     second_start = 0.45 + 0.05 * roundness
+    # continuity_segments define normalized progress ranges where the lip should interpolate smoothly with neighboring surfaces.
     continuity = ((0.0, first_end), (second_start, 1.0))
 
     lips: list[LipCurveDraft] = []
@@ -66,22 +67,33 @@ def build_blocker_masses(
     _ = gaps
     if len(levels) < 2:
         return []
+    axis_mid_y = blueprint.axis_points[1][1]
+    density_scale = 1.0 + blueprint.blocker_density * 0.4
+    gap_count = len(gaps)
     mid_index = min(2, len(levels) - 1)
+
+    first_lip_x = lips[1].points[0][0] if len(lips) > 1 else -1.45
+    second_lip_x = lips[mid_index].points[-1][0]
+
+    width = 1.4 * density_scale
+    height = 1.1 + blueprint.blocker_density * 0.2
+    forward_offset = -0.55 - gap_count * 0.05
+
     return [
         BlockerMass(
             level_index=1,
-            center=(-1.45, -0.55, levels[1].elevation - 0.8),
-            width=1.4,
-            height=1.1,
-            forward_offset=-0.55,
+            center=(first_lip_x, axis_mid_y, levels[1].elevation - 0.8),
+            width=width,
+            height=height,
+            forward_offset=forward_offset,
             manual=False,
         ),
         BlockerMass(
             level_index=mid_index,
-            center=(1.75, -0.62, levels[mid_index].elevation - 0.55),
-            width=1.2,
-            height=0.9,
-            forward_offset=-0.62,
+            center=(second_lip_x, axis_mid_y, levels[mid_index].elevation - 0.55),
+            width=1.2 * density_scale,
+            height=0.9 + blueprint.blocker_density * 0.15,
+            forward_offset=forward_offset - 0.07,
             manual=False,
         ),
     ]
