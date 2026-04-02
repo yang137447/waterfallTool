@@ -20,3 +20,5 @@ class WFT_Settings(bpy.types.PropertyGroup):
         subtype="DIR_PATH",
     )
     export_stem: bpy.props.StringProperty(name="Export Stem", default="waterfall")
+    split_guide_object: bpy.props.PointerProperty(name="Split Guide", type=bpy.types.Object)
+    breakup_region_object: bpy.props.PointerProperty(name="Breakup Region", type=bpy.types.Object)

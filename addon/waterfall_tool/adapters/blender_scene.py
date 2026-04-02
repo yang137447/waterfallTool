@@ -74,3 +74,13 @@ class BlenderCollider:
             support=support,
             obstacle=obstacle,
         )
+
+
+def sample_control_influences(position, split_guide_object, breakup_region_object):
+    _ = position
+    control_sample = {"split_boost": 0.0, "breakup_boost": 0.0}
+    if split_guide_object is not None:
+        control_sample["split_boost"] = 0.2
+    if breakup_region_object is not None:
+        control_sample["breakup_boost"] = 0.5
+    return control_sample

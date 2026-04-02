@@ -3,7 +3,7 @@ from __future__ import annotations
 import bpy
 
 from ..adapters.blender_debug import ensure_preview_curves
-from ..adapters.blender_scene import BlenderCollider, sample_emitter_points
+from ..adapters.blender_scene import BlenderCollider, sample_control_influences, sample_emitter_points
 from ..core.preview import build_preview_paths
 from ..core.types import FlowSettings
 
@@ -23,6 +23,17 @@ class WFT_OT_GeneratePreview(bpy.types.Operator):
             split_sensitivity=0.35,
             breakup_rate=0.2,
         )
-        paths = build_preview_paths(emitter_points, collider, flow_settings, settings.preview_steps)
+        control_sampler = lambda position: sample_control_influences(
+            position,
+            settings.split_guide_object,
+            settings.breakup_region_object,
+        )
+        paths = build_preview_paths(
+            emitter_points,
+            collider,
+            flow_settings,
+            settings.preview_steps,
+            control_sampler=control_sampler,
+        )
         ensure_preview_curves(context, paths)
         return {"FINISHED"}

@@ -21,6 +21,8 @@ class WFT_PT_MainPanel(bpy.types.Panel):
         layout.prop(settings, "sheet_width")
         layout.prop(settings, "export_directory")
         layout.prop(settings, "export_stem")
+        layout.prop(settings, "split_guide_object")
+        layout.prop(settings, "breakup_region_object")
         layout.operator("wft.generate_preview")
         layout.operator("wft.bake_preview")
         layout.operator("wft.rebuild_waterfall")
