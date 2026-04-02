@@ -22,3 +22,9 @@ class WFT_Settings(bpy.types.PropertyGroup):
     export_stem: bpy.props.StringProperty(name="Export Stem", default="waterfall")
     split_guide_object: bpy.props.PointerProperty(name="Split Guide", type=bpy.types.Object)
     breakup_region_object: bpy.props.PointerProperty(name="Breakup Region", type=bpy.types.Object)
+
+    terrain_axis_object: bpy.props.PointerProperty(name="Terrain Axis", type=bpy.types.Object)
+    terrain_level_count: bpy.props.IntProperty(name="Terrain Levels", default=6, min=2, max=64)
+    terrain_total_drop: bpy.props.FloatProperty(name="Terrain Total Drop", default=3.0, min=0.0, max=100.0)
+    terrain_base_width: bpy.props.FloatProperty(name="Terrain Base Width", default=8.0, min=0.1, max=100.0)
+    terrain_depth: bpy.props.FloatProperty(name="Terrain Depth", default=2.0, min=0.0, max=100.0)

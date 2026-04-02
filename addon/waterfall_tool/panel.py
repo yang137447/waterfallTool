@@ -23,6 +23,16 @@ class WFT_PT_MainPanel(bpy.types.Panel):
         layout.prop(settings, "export_stem")
         layout.prop(settings, "split_guide_object")
         layout.prop(settings, "breakup_region_object")
+
+        terrain_box = layout.box()
+        terrain_box.label(text="Terrain Generator")
+        terrain_box.prop(settings, "terrain_axis_object")
+        terrain_box.prop(settings, "terrain_level_count")
+        terrain_box.prop(settings, "terrain_total_drop")
+        terrain_box.prop(settings, "terrain_base_width")
+        terrain_box.prop(settings, "terrain_depth")
+        terrain_box.operator("wft.generate_terrace_terrain")
+
         layout.operator("wft.generate_preview")
         layout.operator("wft.bake_preview")
         layout.operator("wft.rebuild_waterfall")
