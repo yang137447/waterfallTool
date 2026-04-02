@@ -13,7 +13,7 @@ waterfall_tool.register()
 
 mesh = bpy.data.meshes.new("ExportMesh")
 mesh.from_pydata([(0, 0, 0), (1, 0, 0), (0, 0, -1), (1, 0, -1)], [], [(0, 1, 3, 2)])
-obj = bpy.data.objects.new("ExportMesh", mesh)
+obj = bpy.data.objects.new("WFT_MainSheet", mesh)
 bpy.context.scene.collection.objects.link(obj)
 
 settings = bpy.context.scene.wft_settings
