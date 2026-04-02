@@ -9,16 +9,9 @@ import waterfall_tool  # noqa: E402
 
 waterfall_tool.register()
 
-from waterfall_tool.adapters.blender_terrain import (  # noqa: E402
-    GENERATED_TAG_KEY,
-    GENERATED_TERRAIN_COLLECTION_NAME,
-    build_blueprint_from_scene,
-    read_lip_overrides,
-)
-from waterfall_tool.terrain.blueprint import build_terrace_levels  # noqa: E402
-from waterfall_tool.terrain.emitters import build_suggested_emitters, choose_handoff_emitter_name  # noqa: E402
-from waterfall_tool.terrain.layout import build_gap_segments, build_lip_curves  # noqa: E402
-from waterfall_tool.terrain.overrides import apply_lip_overrides  # noqa: E402
+from waterfall_tool.adapters.blender_terrain import GENERATED_TAG_KEY, GENERATED_TERRAIN_COLLECTION_NAME  # noqa: E402
+from waterfall_tool.terrain.emitters import choose_handoff_emitter_name  # noqa: E402
+from waterfall_tool.terrain.types import SuggestedEmitter  # noqa: E402
 
 curve_data = bpy.data.curves.new("TerrainAxis", type="CURVE")
 curve_data.dimensions = "3D"
@@ -45,14 +38,29 @@ tagged_objects = {obj.name: obj for obj in generated_collection.objects if obj.g
 expected_terrain = tagged_objects.get("WFT_Terrain_MainTerrain")
 assert expected_terrain is not None
 
-blueprint = build_blueprint_from_scene(settings)
-levels = build_terrace_levels(blueprint)
-lips = build_lip_curves(levels, blueprint)
-overrides = read_lip_overrides(settings.terrain_override_collection)
-lips = apply_lip_overrides(lips, overrides)
-gaps = build_gap_segments(lips, blueprint)
-emitters = build_suggested_emitters(lips, gaps)
-object_names = [f"WFT_Terrain_SuggestedEmitter_{index:02d}" for index in range(len(emitters))]
+emitter_objects = [
+    obj
+    for obj in tagged_objects.values()
+    if obj.name.startswith("WFT_Terrain_SuggestedEmitter_") and obj.type == "CURVE"
+]
+assert emitter_objects, "Expected at least one generated emitter object"
+
+# Validate the new metadata path: generator should persist selection-relevant fields on objects.
+emitters: list[SuggestedEmitter] = []
+object_names: list[str] = []
+for obj in sorted(emitter_objects, key=lambda item: int(item.get("wft_emitter_index", -1))):
+    assert "wft_strength" in obj, "Missing emitter strength metadata"
+    assert "wft_level_index" in obj, "Missing emitter level_index metadata"
+    emitters.append(
+        SuggestedEmitter(
+            level_index=int(obj["wft_level_index"]),
+            points=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)],
+            strength=float(obj["wft_strength"]),
+            enabled=True,
+        )
+    )
+    object_names.append(obj.name)
+
 expected_emitter_name = choose_handoff_emitter_name(object_names, emitters)
 expected_emitter = tagged_objects.get(expected_emitter_name)
 assert expected_emitter is not None

@@ -300,6 +300,10 @@ def create_terrain_objects(context: bpy.types.Context, settings) -> None:
                 spline.points[point_index].co = (*point, 1.0)
             emitter_object = bpy.data.objects.new(f"WFT_Terrain__TMP_SuggestedEmitter_{index:02d}", curve_data)
             emitter_object[GENERATED_TAG_KEY] = True
+            # Persist minimal chooser metadata so handoff can select without re-running the terrain pipeline.
+            emitter_object["wft_emitter_index"] = index
+            emitter_object["wft_level_index"] = emitter.level_index
+            emitter_object["wft_strength"] = float(emitter.strength)
             temp_collection.objects.link(emitter_object)
 
         reserved_object_names = ["WFT_Terrain_MainTerrain"] + [

@@ -5,13 +5,9 @@ import bpy
 from ..adapters.blender_terrain import (
     GENERATED_TAG_KEY,
     GENERATED_TERRAIN_COLLECTION_NAME,
-    build_blueprint_from_scene,
-    read_lip_overrides,
 )
-from ..terrain.blueprint import build_terrace_levels
-from ..terrain.emitters import build_suggested_emitters, choose_handoff_emitter_name
-from ..terrain.layout import build_gap_segments, build_lip_curves
-from ..terrain.overrides import apply_lip_overrides
+from ..terrain.emitters import choose_handoff_emitter_name
+from ..terrain.types import SuggestedEmitter
 
 class WFT_OT_UseGeneratedTerrainForWaterfall(bpy.types.Operator):
     bl_idname = "wft.use_generated_terrain_for_waterfall"
@@ -34,15 +30,34 @@ class WFT_OT_UseGeneratedTerrainForWaterfall(bpy.types.Operator):
             self.report({"ERROR"}, "Generate terrain before handoff")
             return {"CANCELLED"}
 
+        emitter_objects = [
+            obj
+            for obj in tagged_objects.values()
+            if obj.name.startswith("WFT_Terrain_SuggestedEmitter_") and obj.type == "CURVE"
+        ]
+        if not emitter_objects:
+            self.report({"ERROR"}, "Generate terrain before handoff")
+            return {"CANCELLED"}
+
+        emitters: list[SuggestedEmitter] = []
+        object_names: list[str] = []
         try:
-            blueprint = build_blueprint_from_scene(settings)
-            levels = build_terrace_levels(blueprint)
-            lips = build_lip_curves(levels, blueprint)
-            overrides = read_lip_overrides(settings.terrain_override_collection)
-            lips = apply_lip_overrides(lips, overrides)
-            gaps = build_gap_segments(lips, blueprint)
-            emitters = build_suggested_emitters(lips, gaps)
-            object_names = [f"WFT_Terrain_SuggestedEmitter_{index:02d}" for index in range(len(emitters))]
+            for obj in sorted(emitter_objects, key=lambda item: int(item.get("wft_emitter_index", -1))):
+                emitters.append(
+                    SuggestedEmitter(
+                        level_index=int(obj["wft_level_index"]),
+                        # Handoff chooser only needs strength + level ordering; points are not used.
+                        points=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)],
+                        strength=float(obj["wft_strength"]),
+                        enabled=True,
+                    )
+                )
+                object_names.append(obj.name)
+        except Exception:
+            self.report({"ERROR"}, "Generated terrain is missing emitter metadata. Re-generate terrain.")
+            return {"CANCELLED"}
+
+        try:
             chosen_name = choose_handoff_emitter_name(object_names, emitters)
         except Exception as exc:
             self.report({"ERROR"}, f"Could not choose terrain emitter: {exc}")
