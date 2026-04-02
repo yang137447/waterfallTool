@@ -21,7 +21,8 @@ EXPORT_DIR.mkdir(parents=True, exist_ok=True)
 
 def require_object(name: str) -> bpy.types.Object:
     obj = bpy.data.objects.get(name)
-    assert obj is not None, f"Required object '{name}' not found. Scene generation likely failed."
+    if obj is None:
+        raise RuntimeError(f"Required object '{name}' not found. Scene generation likely failed.")
     return obj
 
 
@@ -113,20 +114,32 @@ def main() -> None:
     settings.split_guide_object = split_guide
     settings.breakup_region_object = breakup_region
 
-    assert bpy.ops.wft.generate_terrace_terrain() == {"FINISHED"}
-    assert bpy.ops.wft.use_generated_terrain_for_waterfall() == {"FINISHED"}
+    result = bpy.ops.wft.generate_terrace_terrain()
+    if result != {"FINISHED"}:
+        raise RuntimeError(f"wft.generate_terrace_terrain failed: {result}")
+
+    result = bpy.ops.wft.use_generated_terrain_for_waterfall()
+    if result != {"FINISHED"}:
+        raise RuntimeError(f"wft.use_generated_terrain_for_waterfall failed: {result}")
 
     terrain = require_object("WFT_Terrain_MainTerrain")
     terrain.data.materials.append(create_material("CliffMat", (0.18, 0.20, 0.23, 1.0), roughness=0.8))
 
-    assert bpy.ops.wft.generate_preview() == {"FINISHED"}
+    result = bpy.ops.wft.generate_preview()
+    if result != {"FINISHED"}:
+        raise RuntimeError(f"wft.generate_preview failed: {result}")
     preview = require_object("WFT_PreviewPaths")
     preview.data.bevel_depth = 0.03
     preview.data.bevel_resolution = 3
     preview.data.materials.append(create_material("PreviewMat", (0.12, 0.55, 1.0, 1.0), roughness=0.2))
 
-    assert bpy.ops.wft.bake_preview() == {"FINISHED"}
-    assert bpy.ops.wft.rebuild_waterfall() == {"FINISHED"}
+    result = bpy.ops.wft.bake_preview()
+    if result != {"FINISHED"}:
+        raise RuntimeError(f"wft.bake_preview failed: {result}")
+
+    result = bpy.ops.wft.rebuild_waterfall()
+    if result != {"FINISHED"}:
+        raise RuntimeError(f"wft.rebuild_waterfall failed: {result}")
 
     ribbon = require_object("WFT_MainSheet")
     ribbon.location.y = -0.06
