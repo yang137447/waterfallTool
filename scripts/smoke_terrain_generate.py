@@ -35,6 +35,8 @@ generated = bpy.data.collections.get("WFT_Terrain_Generated")
 assert generated is not None
 assert terrain.name in [obj.name for obj in generated.objects]
 assert bool(terrain.get("wft_generated_terrain")) is True
+assert emitter0.name in [obj.name for obj in generated.objects]
+assert bool(emitter0.get("wft_generated_terrain")) is True
 
 # Repeated generation should not accumulate .001 duplicates.
 result = bpy.ops.wft.generate_terrace_terrain()
