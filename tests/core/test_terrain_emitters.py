@@ -26,3 +26,20 @@ def test_build_suggested_emitters_skips_gap_segments():
 def test_choose_handoff_emitter_requires_emitters():
     with pytest.raises(ValueError, match="suggested emitters"):
         choose_handoff_emitter([])
+
+
+def test_build_suggested_emitters_subtracts_gap_ranges():
+    lip = LipCurveDraft(
+        level_index=0,
+        points=[(x, 0.0, 0.0) for x in range(6)],
+        continuity_segments=[(0.0, 1.0)],
+        overridden=False,
+    )
+    gaps = [GapSegment(level_index=0, start_ratio=0.4, end_ratio=0.6, depth_strength=0.5, locked=False)]
+
+    emitters = build_suggested_emitters([lip], gaps)
+
+    assert len(emitters) == 2
+    strengths = [emitter.strength for emitter in emitters]
+    assert strengths == pytest.approx([0.4, 0.4])
+    assert emitters[0].points[-1][0] < emitters[1].points[0][0]

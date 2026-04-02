@@ -80,3 +80,43 @@ def test_build_main_terrain_mesh_requires_three_lip_points():
 
     with pytest.raises(ValueError, match="Lip curve points"):
         build_main_terrain_mesh(levels, lips, [])
+
+
+def test_build_main_terrain_mesh_requires_matching_level_indices():
+    levels = [
+        TerraceLevel(
+            level_index=0,
+            elevation=0.0,
+            terrace_depth=1.0,
+            terrace_width=1.0,
+            drop_height_to_next=0.5,
+            basin_strength=0.5,
+            lip_profile_mode="arc",
+        ),
+        TerraceLevel(
+            level_index=1,
+            elevation=-1.0,
+            terrace_depth=1.0,
+            terrace_width=1.0,
+            drop_height_to_next=0.0,
+            basin_strength=0.6,
+            lip_profile_mode="mixed",
+        ),
+    ]
+    lips = [
+        LipCurveDraft(
+            level_index=0,
+            points=[(0.0, 0.0, 1.0), (1.0, 0.0, 1.0), (2.0, 0.0, 1.0)],
+            continuity_segments=[(0.0, 0.5)],
+            overridden=False,
+        ),
+        LipCurveDraft(
+            level_index=4,
+            points=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (2.0, 0.0, 0.0)],
+            continuity_segments=[(0.5, 1.0)],
+            overridden=False,
+        ),
+    ]
+
+    with pytest.raises(ValueError, match="Level index mismatch"):
+        build_main_terrain_mesh(levels, lips, [])
