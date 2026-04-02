@@ -8,6 +8,7 @@ def build_main_terrain_mesh(
     lips: list[LipCurveDraft],
     blockers: list[BlockerMass],
 ) -> TerrainMeshPayload:
+    # Blockers are tracked here for future cutout/terrain shaping but not consumed yet.
     _ = blockers
     if len(levels) != len(lips):
         raise ValueError("levels and lips lists must have the same length")
