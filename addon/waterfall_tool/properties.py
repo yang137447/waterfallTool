@@ -13,3 +13,4 @@ class WFT_Settings(bpy.types.PropertyGroup):
         default="D:/YYBWorkSpace/GitHub/waterfallTool/cache/preview.json",
         subtype="FILE_PATH",
     )
+    sheet_width: bpy.props.FloatProperty(name="Sheet Width", default=0.5, min=0.05, max=10.0)

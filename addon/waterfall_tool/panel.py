@@ -18,5 +18,7 @@ class WFT_PT_MainPanel(bpy.types.Panel):
         layout.prop(settings, "preview_steps")
         layout.prop(settings, "particle_count")
         layout.prop(settings, "cache_path")
+        layout.prop(settings, "sheet_width")
         layout.operator("wft.generate_preview")
         layout.operator("wft.bake_preview")
+        layout.operator("wft.rebuild_waterfall")

@@ -4,6 +4,7 @@ CLASSES: tuple[type, ...] = ()
 def _load_blender_classes() -> tuple[type, ...]:
     from .operators.bake import WFT_OT_BakePreview
     from .operators.preview import WFT_OT_GeneratePreview
+    from .operators.rebuild import WFT_OT_RebuildWaterfall
     from .panel import WFT_PT_MainPanel
     from .properties import WFT_Settings
 
@@ -11,6 +12,7 @@ def _load_blender_classes() -> tuple[type, ...]:
         WFT_Settings,
         WFT_OT_GeneratePreview,
         WFT_OT_BakePreview,
+        WFT_OT_RebuildWaterfall,
         WFT_PT_MainPanel,
     )
 
