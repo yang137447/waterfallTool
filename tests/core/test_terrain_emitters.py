@@ -49,7 +49,7 @@ def test_build_suggested_emitters_subtracts_gap_ranges():
     assert emitters[0].points[-1][0] < emitters[1].points[0][0]
 
 
-def test_choose_handoff_emitter_name_picks_strongest_enabled_emitter():
+def test_choose_handoff_emitter_name_picks_strongest_emitter():
     emitters = [
         SuggestedEmitter(level_index=0, points=[(-2.0, 0.0, 4.0), (0.0, 0.0, 3.8)], strength=0.25, enabled=True),
         SuggestedEmitter(level_index=1, points=[(-1.0, 0.0, 1.0), (1.0, 0.0, 0.9)], strength=0.4, enabled=True),
@@ -61,4 +61,26 @@ def test_choose_handoff_emitter_name_picks_strongest_enabled_emitter():
             emitters,
         )
         == "WFT_Terrain_SuggestedEmitter_01"
+    )
+
+
+def test_choose_handoff_emitter_name_requires_matching_name_list_length():
+    emitters = [SuggestedEmitter(level_index=0, points=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)], strength=0.5, enabled=True)]
+
+    with pytest.raises(ValueError, match="object names"):
+        choose_handoff_emitter_name(["WFT_Terrain_SuggestedEmitter_00", "WFT_Terrain_SuggestedEmitter_01"], emitters)
+
+
+def test_choose_handoff_emitter_name_is_deterministic_for_ties():
+    emitters = [
+        SuggestedEmitter(level_index=0, points=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)], strength=0.5, enabled=True),
+        SuggestedEmitter(level_index=0, points=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)], strength=0.5, enabled=True),
+    ]
+
+    assert (
+        choose_handoff_emitter_name(
+            ["WFT_Terrain_SuggestedEmitter_00", "WFT_Terrain_SuggestedEmitter_01"],
+            emitters,
+        )
+        == "WFT_Terrain_SuggestedEmitter_00"
     )

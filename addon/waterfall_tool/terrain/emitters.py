@@ -57,6 +57,16 @@ def choose_handoff_emitter(emitters: list[SuggestedEmitter]) -> SuggestedEmitter
 
 
 def choose_handoff_emitter_name(object_names: list[str], emitters: list[SuggestedEmitter]) -> str:
-    chosen = choose_handoff_emitter(emitters)
-    chosen_index = emitters.index(chosen)
+    if len(object_names) != len(emitters):
+        raise ValueError(
+            f"Expected object names list to match emitters length (got {len(object_names)} names, {len(emitters)} emitters)"
+        )
+    if not emitters:
+        raise ValueError("No suggested emitters were provided")
+
+    # Mirror choose_handoff_emitter's ranking (strength desc, level_index asc) and keep ties deterministic by index.
+    chosen_index = min(
+        range(len(emitters)),
+        key=lambda index: (-emitters[index].strength, emitters[index].level_index, index),
+    )
     return object_names[chosen_index]
