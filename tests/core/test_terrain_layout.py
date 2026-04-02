@@ -44,6 +44,7 @@ def test_layout_generation_creates_lips_gaps_and_blockers():
     assert blockers[0].width == approx(expected_width)
     assert blockers[0].height == approx(expected_height)
     assert blockers[0].forward_offset == approx(expected_forward)
+    assert blockers[0].center[0] == approx(lips[1].points[0][0])
 
 
 def test_gap_segments_produces_single_gap_for_two_levels():

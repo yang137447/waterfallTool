@@ -63,28 +63,31 @@ def build_blocker_masses(
     gaps: list[GapSegment],
     blueprint: TerrainBlueprint,
 ) -> list[BlockerMass]:
-    _ = lips
-    _ = gaps
-    if len(levels) < 2:
+    if len(levels) < 2 or len(lips) < 2:
         return []
-    axis_mid_y = blueprint.axis_points[1][1]
-    density_scale = 1.0 + blueprint.blocker_density * 0.4
-    gap_count = len(gaps)
-    mid_index = min(2, len(levels) - 1)
+    if len(blueprint.axis_points) < 2:
+        raise ValueError("TerrainBlueprint.axis_points must contain at least 2 entries to position blockers")
 
-    first_lip_x = lips[1].points[0][0] if len(lips) > 1 else -1.45
+    axis_mid_y = blueprint.axis_points[1][1]
+    density = max(0.0, min(1.0, blueprint.blocker_density))
+    density_scale = 1.0 + density * 0.4
+    gap_count = len(gaps)
+    base_mid_index = min(2, len(levels) - 1)
+    mid_index = min(base_mid_index, len(lips) - 1)
+
+    first_lip_x = lips[1].points[0][0]
     second_lip_x = lips[mid_index].points[-1][0]
 
-    width = 1.4 * density_scale
-    height = 1.1 + blueprint.blocker_density * 0.2
+    first_width = 1.4 * density_scale
+    first_height = 1.1 + density * 0.2
     forward_offset = -0.55 - gap_count * 0.05
 
     return [
         BlockerMass(
             level_index=1,
             center=(first_lip_x, axis_mid_y, levels[1].elevation - 0.8),
-            width=width,
-            height=height,
+            width=first_width,
+            height=first_height,
             forward_offset=forward_offset,
             manual=False,
         ),
@@ -92,7 +95,7 @@ def build_blocker_masses(
             level_index=mid_index,
             center=(second_lip_x, axis_mid_y, levels[mid_index].elevation - 0.55),
             width=1.2 * density_scale,
-            height=0.9 + blueprint.blocker_density * 0.15,
+            height=0.9 + density * 0.15,
             forward_offset=forward_offset - 0.07,
             manual=False,
         ),
