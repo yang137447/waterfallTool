@@ -16,6 +16,10 @@ DEFAULT_GAP_FREQUENCY = 0.25
 DEFAULT_BLOCKER_DENSITY = 0.3
 DEFAULT_SEED = 7
 
+GENERATED_TERRAIN_COLLECTION_NAME = "WFT_Terrain_Generated"
+TEMP_COLLECTION_NAME = "WFT_Terrain_Generated__temp"
+GENERATED_TAG_KEY = "wft_generated_terrain"
+
 
 def read_axis_points(axis_object: bpy.types.Object) -> list[tuple[float, float, float]]:
     if axis_object is None:
@@ -28,21 +32,49 @@ def read_axis_points(axis_object: bpy.types.Object) -> list[tuple[float, float, 
         raise ValueError("Terrain axis curve must have at least one spline")
 
     spline = axis_object.data.splines[0]
-    if not getattr(spline, "points", None) or len(spline.points) < 2:
-        raise ValueError("Terrain axis spline must have at least 2 points")
+    spline_type = getattr(spline, "type", None)
+    if spline_type == "BEZIER":
+        if not getattr(spline, "bezier_points", None) or len(spline.bezier_points) < 2:
+            raise ValueError("Terrain axis Bezier spline must have at least 2 bezier points")
+        points = [mathutils.Vector(point.co[:3]) for point in spline.bezier_points]
+    elif spline_type in {"POLY", "NURBS"}:
+        if not getattr(spline, "points", None) or len(spline.points) < 2:
+            raise ValueError(f"Terrain axis {spline_type} spline must have at least 2 points")
+        points = [mathutils.Vector(point.co[:3]) for point in spline.points]
+    else:
+        raise ValueError(f"Unsupported terrain axis spline type: {spline_type!r} (use Poly, Nurbs, or Bezier)")
 
-    return [tuple(axis_object.matrix_world @ mathutils.Vector(point.co[:3])) for point in spline.points]
+    return [tuple(axis_object.matrix_world @ point) for point in points]
 
 
-def _cleanup_existing_terrain_outputs() -> None:
-    # Remove prior outputs so repeated generation is stable and does not create .001 duplicates.
-    for obj in list(bpy.data.objects):
-        if not obj.name.startswith("WFT_Terrain_"):
+def _ensure_collection(scene: bpy.types.Scene, name: str) -> bpy.types.Collection:
+    existing = bpy.data.collections.get(name)
+    if existing is None:
+        existing = bpy.data.collections.new(name)
+    if existing.name not in {child.name for child in scene.collection.children}:
+        scene.collection.children.link(existing)
+    return existing
+
+
+def _remove_collection_if_present(scene: bpy.types.Scene, name: str) -> None:
+    col = bpy.data.collections.get(name)
+    if col is None:
+        return
+    for child in list(scene.collection.children):
+        if child == col:
+            scene.collection.children.unlink(col)
+            break
+    bpy.data.collections.remove(col)
+
+
+def _cleanup_generated_collection_outputs(collection: bpy.types.Collection) -> None:
+    # Only remove outputs that were created/tagged by this generator inside the dedicated collection.
+    for obj in list(collection.objects):
+        if not obj.get(GENERATED_TAG_KEY, False):
             continue
 
         data = getattr(obj, "data", None)
         bpy.data.objects.remove(obj, do_unlink=True)
-
         if data is None:
             continue
         try:
@@ -52,7 +84,6 @@ def _cleanup_existing_terrain_outputs() -> None:
                 elif isinstance(data, bpy.types.Curve):
                     bpy.data.curves.remove(data)
         except ReferenceError:
-            # Data may already be gone; ignore.
             pass
 
 
@@ -76,7 +107,8 @@ def build_blueprint_from_scene(settings) -> TerrainBlueprint:
 
 
 def create_terrain_objects(context: bpy.types.Context, settings) -> None:
-    _cleanup_existing_terrain_outputs()
+    # Build and validate first (pure Python pipeline + axis validation). Only replace outputs if
+    # replacement objects are created successfully.
     blueprint = build_blueprint_from_scene(settings)
     levels = build_terrace_levels(blueprint)
     lips = build_lip_curves(levels, blueprint)
@@ -85,18 +117,48 @@ def create_terrain_objects(context: bpy.types.Context, settings) -> None:
     mesh_payload = build_main_terrain_mesh(levels, lips, blockers)
     emitters = build_suggested_emitters(lips, gaps)
 
-    mesh = bpy.data.meshes.new("WFT_Terrain_MainTerrainMesh")
+    scene = context.scene
+    generated_collection = _ensure_collection(scene, GENERATED_TERRAIN_COLLECTION_NAME)
+
+    # Clean up any prior temp collection up front (safe: it's not part of approved outputs).
+    _remove_collection_if_present(scene, TEMP_COLLECTION_NAME)
+    temp_collection = _ensure_collection(scene, TEMP_COLLECTION_NAME)
+
+    mesh = bpy.data.meshes.new("WFT_Terrain__TMP_MainTerrainMesh")
     mesh.from_pydata(mesh_payload.vertices, [], mesh_payload.faces)
     mesh.update()
-    terrain_object = bpy.data.objects.new("WFT_Terrain_MainTerrain", mesh)
-    context.scene.collection.objects.link(terrain_object)
+    terrain_object = bpy.data.objects.new("WFT_Terrain__TMP_MainTerrain", mesh)
+    terrain_object[GENERATED_TAG_KEY] = True
+    temp_collection.objects.link(terrain_object)
 
     for index, emitter in enumerate(emitters):
-        curve_data = bpy.data.curves.new(f"WFT_Terrain_SuggestedEmitterCurve_{index:02d}", type="CURVE")
+        curve_data = bpy.data.curves.new(f"WFT_Terrain__TMP_SuggestedEmitterCurve_{index:02d}", type="CURVE")
         curve_data.dimensions = "3D"
         spline = curve_data.splines.new("POLY")
         spline.points.add(len(emitter.points) - 1)
         for point_index, point in enumerate(emitter.points):
             spline.points[point_index].co = (*point, 1.0)
-        emitter_object = bpy.data.objects.new(f"WFT_Terrain_SuggestedEmitter_{index:02d}", curve_data)
-        context.scene.collection.objects.link(emitter_object)
+        emitter_object = bpy.data.objects.new(f"WFT_Terrain__TMP_SuggestedEmitter_{index:02d}", curve_data)
+        emitter_object[GENERATED_TAG_KEY] = True
+        temp_collection.objects.link(emitter_object)
+
+    # Replace outputs: only now do we remove prior generated outputs and promote temp outputs.
+    _cleanup_generated_collection_outputs(generated_collection)
+
+    for obj in list(temp_collection.objects):
+        # Move to the generated collection and rename to stable final names.
+        generated_collection.objects.link(obj)
+        temp_collection.objects.unlink(obj)
+        if obj.name == "WFT_Terrain__TMP_MainTerrain":
+            obj.name = "WFT_Terrain_MainTerrain"
+            if obj.data is not None:
+                obj.data.name = "WFT_Terrain_MainTerrainMesh"
+        elif obj.name.startswith("WFT_Terrain__TMP_SuggestedEmitter_"):
+            obj.name = obj.name.replace("WFT_Terrain__TMP_SuggestedEmitter_", "WFT_Terrain_SuggestedEmitter_")
+            if obj.data is not None:
+                obj.data.name = obj.data.name.replace(
+                    "WFT_Terrain__TMP_SuggestedEmitterCurve_",
+                    "WFT_Terrain_SuggestedEmitterCurve_",
+                )
+
+    _remove_collection_if_present(scene, TEMP_COLLECTION_NAME)

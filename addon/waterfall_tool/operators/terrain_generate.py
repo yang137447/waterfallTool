@@ -15,7 +15,23 @@ class WFT_OT_GenerateTerraceTerrain(bpy.types.Operator):
         scene = getattr(context, "scene", None)
         settings = getattr(scene, "wft_settings", None) if scene is not None else None
         axis_object = getattr(settings, "terrain_axis_object", None) if settings is not None else None
-        return axis_object is not None
+        if axis_object is None:
+            return False
+        if getattr(axis_object, "type", None) != "CURVE":
+            return False
+        curve_data = getattr(axis_object, "data", None)
+        splines = getattr(curve_data, "splines", None)
+        if not splines or len(splines) < 1:
+            return False
+        spline = splines[0]
+        spline_type = getattr(spline, "type", None)
+        if spline_type == "BEZIER":
+            bez = getattr(spline, "bezier_points", None)
+            return bool(bez) and len(bez) >= 2
+        if spline_type in {"POLY", "NURBS"}:
+            pts = getattr(spline, "points", None)
+            return bool(pts) and len(pts) >= 2
+        return False
 
     def execute(self, context):
         settings = context.scene.wft_settings
