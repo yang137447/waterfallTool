@@ -1,3 +1,5 @@
+from pytest import approx
+
 from waterfall_tool.terrain.blueprint import build_terrace_levels
 from waterfall_tool.terrain.layout import build_blocker_masses, build_gap_segments, build_lip_curves
 from waterfall_tool.terrain.types import TerrainBlueprint
@@ -29,3 +31,33 @@ def test_layout_generation_creates_lips_gaps_and_blockers():
     assert len(gaps) == 2
     assert gaps[0].level_index == 1
     assert len(blockers) == 2
+    assert isinstance(lips[0].points, tuple)
+    axis_mid_y = blueprint.axis_points[1][1]
+    assert all(point[1] == axis_mid_y for point in lips[0].points)
+    gap_freq = max(0.05, min(1.0, blueprint.gap_frequency))
+    assert gaps[0].depth_strength == approx(0.65 * gap_freq)
+    assert len(gaps) == len({gap.level_index for gap in gaps})
+
+
+def test_gap_segments_produces_single_gap_for_two_levels():
+    blueprint = TerrainBlueprint(
+        axis_points=[(-4.0, 0.0, 4.0), (0.0, 0.0, 2.5), (4.0, 0.0, 4.0)],
+        level_count=2,
+        top_elevation=4.0,
+        total_drop=3.0,
+        base_width=6.0,
+        terrace_depth=2.5,
+        width_decay=0.05,
+        depth_decay=0.05,
+        lip_roundness=0.3,
+        gap_frequency=0.4,
+        blocker_density=0.2,
+        seed=9,
+    )
+    levels = build_terrace_levels(blueprint)
+    lips = build_lip_curves(levels, blueprint)
+    gaps = build_gap_segments(lips, blueprint)
+
+    assert len(lips) == 2
+    assert len(gaps) == 1
+    assert gaps[0].level_index == 1

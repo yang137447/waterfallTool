@@ -41,8 +41,8 @@ class TerraceLevel:
 @dataclass(frozen=True)
 class LipCurveDraft:
     level_index: int
-    points: list[Vec3]
-    continuity_segments: list[tuple[float, float]]
+    points: tuple[Vec3, ...]
+    continuity_segments: tuple[tuple[float, float], ...]
     overridden: bool
 
 

@@ -4,23 +4,31 @@ from .types import BlockerMass, GapSegment, LipCurveDraft, TerraceLevel, Terrain
 
 
 def build_lip_curves(levels: list[TerraceLevel], blueprint: TerrainBlueprint) -> list[LipCurveDraft]:
+    if len(blueprint.axis_points) < 2:
+        raise ValueError("TerrainBlueprint.axis_points must contain at least 2 entries to build lip curves")
+
     axis_mid = blueprint.axis_points[1]
+    roundness = max(0.1, min(1.0, blueprint.lip_roundness))
+    first_end = 0.32 + 0.08 * roundness
+    second_start = 0.45 + 0.05 * roundness
+    continuity = ((0.0, first_end), (second_start, 1.0))
+
     lips: list[LipCurveDraft] = []
     for level in levels:
         half_width = level.terrace_width * 0.5
-        points = [
+        point_list = (
             (-half_width, 0.0, level.elevation + 0.18),
             (-half_width * 0.45, 0.0, level.elevation + 0.05),
             (0.0, 0.0, level.elevation - 0.12 * (level.level_index + 1)),
             (half_width * 0.4, 0.0, level.elevation + 0.02),
             (half_width, 0.0, level.elevation + 0.15),
-        ]
-        points = [(point[0], axis_mid[1], point[2]) for point in points]
+        )
+        points = tuple((point[0], axis_mid[1], point[2]) for point in point_list)
         lips.append(
             LipCurveDraft(
                 level_index=level.level_index,
                 points=points,
-                continuity_segments=[(0.0, 0.32), (0.45, 1.0)],
+                continuity_segments=continuity,
                 overridden=False,
             )
         )
@@ -30,10 +38,22 @@ def build_lip_curves(levels: list[TerraceLevel], blueprint: TerrainBlueprint) ->
 def build_gap_segments(lips: list[LipCurveDraft], blueprint: TerrainBlueprint) -> list[GapSegment]:
     if len(lips) < 2:
         return []
-    return [
-        GapSegment(level_index=1, start_ratio=0.32, end_ratio=0.45, depth_strength=0.65, locked=False),
-        GapSegment(level_index=min(2, len(lips) - 1), start_ratio=0.58, end_ratio=0.72, depth_strength=0.5, locked=False),
+
+    gap_freq = max(0.05, min(1.0, blueprint.gap_frequency))
+    segments: list[GapSegment] = [
+        GapSegment(level_index=1, start_ratio=0.32, end_ratio=0.45, depth_strength=0.65 * gap_freq, locked=False)
     ]
+    if len(lips) > 2:
+        segments.append(
+            GapSegment(
+                level_index=min(2, len(lips) - 1),
+                start_ratio=0.58,
+                end_ratio=0.72,
+                depth_strength=0.5 * gap_freq,
+                locked=False,
+            )
+        )
+    return segments
 
 
 def build_blocker_masses(
