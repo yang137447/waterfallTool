@@ -1,0 +1,12 @@
+[project]
+name = "waterfall-tool"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8.2,<10"]
+
+[tool.pytest.ini_options]
+pythonpath = ["addon"]
+testpaths = ["tests"]
