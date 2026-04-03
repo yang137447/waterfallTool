@@ -10,7 +10,7 @@ from ..core.types import FlowSettings
 
 class WFT_OT_GeneratePreview(bpy.types.Operator):
     bl_idname = "wft.generate_preview"
-    bl_label = "Generate Preview"
+    bl_label = "Generate Flow Preview"
 
     def execute(self, context):
         settings = context.scene.wft_settings

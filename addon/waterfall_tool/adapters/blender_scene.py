@@ -3,6 +3,7 @@ from __future__ import annotations
 import bpy
 import mathutils
 
+from ..core.emitter_sampling import sample_polyline_evenly
 from ..core.types import CollisionSample
 
 
@@ -19,13 +20,8 @@ def sample_emitter_points(emitter_object: bpy.types.Object, count: int):
     if not points:
         return []
 
-    if count <= len(points):
-        return [tuple(point) for point in points[:count]]
-
-    samples = []
-    for index in range(count):
-        samples.append(tuple(points[index % len(points)]))
-    return samples
+    point_tuples = tuple(tuple(point) for point in points)
+    return sample_polyline_evenly(point_tuples, count)
 
 
 class BlenderCollider:
