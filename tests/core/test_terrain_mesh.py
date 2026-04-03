@@ -30,7 +30,8 @@ def test_build_main_terrain_mesh_creates_faces_and_level_ids():
 
     # Each level should contribute a small terrace grid, not just two fan quads.
     assert len(mesh.vertices) == 60
-    assert len(mesh.faces) == 36
+    # The terrace keeps a full grid of vertices while omitting some faces where lip gaps cut through.
+    assert len(mesh.faces) == 27
     assert mesh.level_ids.count(0) > 0
     assert len(mesh.level_ids) == len(mesh.vertices)
     face_indices = [index for face in mesh.faces for index in face]
@@ -64,6 +65,60 @@ def test_build_main_terrain_mesh_preserves_full_lip_sampling_per_level():
     row_width = len(lips[0].points)
     rows_per_level = len(mesh.vertices) // len(levels) // row_width
     assert rows_per_level == 4
+
+
+def test_build_main_terrain_mesh_uses_gap_segments_to_remove_terrace_faces():
+    blueprint = TerrainBlueprint(
+        axis_points=[(-4.0, 0.0, 4.0), (0.0, 0.0, 2.5), (4.0, 0.0, 4.0)],
+        level_count=3,
+        top_elevation=4.0,
+        total_drop=6.0,
+        base_width=8.0,
+        terrace_depth=2.8,
+        width_decay=0.1,
+        depth_decay=0.12,
+        lip_roundness=0.4,
+        gap_frequency=0.25,
+        blocker_density=0.3,
+        seed=7,
+    )
+    levels = build_terrace_levels(blueprint)
+    lips = build_lip_curves(levels, blueprint)
+    gaps = build_gap_segments(lips, blueprint)
+    blockers = build_blocker_masses(levels, lips, gaps, blueprint)
+
+    mesh = build_main_terrain_mesh(levels, lips, blockers)
+
+    # Gaps should remove some terrace quads instead of filling every strip.
+    assert len(mesh.faces) == 27
+
+
+def test_build_main_terrain_mesh_uses_blockers_to_shape_surface_profile():
+    blueprint = TerrainBlueprint(
+        axis_points=[(-4.0, 0.0, 4.0), (0.0, 0.0, 2.5), (4.0, 0.0, 4.0)],
+        level_count=3,
+        top_elevation=4.0,
+        total_drop=6.0,
+        base_width=8.0,
+        terrace_depth=2.8,
+        width_decay=0.1,
+        depth_decay=0.12,
+        lip_roundness=0.4,
+        gap_frequency=0.25,
+        blocker_density=0.3,
+        seed=7,
+    )
+    levels = build_terrace_levels(blueprint)
+    lips = build_lip_curves(levels, blueprint)
+    gaps = build_gap_segments(lips, blueprint)
+    blockers = build_blocker_masses(levels, lips, gaps, blueprint)
+
+    flat_mesh = build_main_terrain_mesh(levels, lips, [])
+    shaped_mesh = build_main_terrain_mesh(levels, lips, blockers)
+
+    # Blockers should locally raise/push parts of the terrain surface.
+    z_deltas = [shaped[2] - flat[2] for shaped, flat in zip(shaped_mesh.vertices, flat_mesh.vertices)]
+    assert max(z_deltas) > 0.15
 
 
 def test_build_main_terrain_mesh_requires_matching_levels_and_lips():
