@@ -5,6 +5,28 @@ import math
 from .types import BlockerMass, LipCurveDraft, TerraceLevel, TerrainMeshPayload
 
 
+def _gap_spans(continuity_segments: tuple[tuple[float, float], ...]) -> list[tuple[float, float]]:
+    ordered = sorted(continuity_segments)
+    spans: list[tuple[float, float]] = []
+    cursor = 0.0
+    for start, end in ordered:
+        if start > cursor:
+            spans.append((cursor, start))
+        cursor = max(cursor, end)
+    if cursor < 1.0:
+        spans.append((cursor, 1.0))
+    return spans
+
+
+def _gap_influence(progress: float, continuity_segments: tuple[tuple[float, float], ...]) -> float:
+    influence = 0.0
+    for start, end in _gap_spans(continuity_segments):
+        center = (start + end) * 0.5
+        radius = max(0.08, (end - start) * 0.6)
+        influence = max(influence, max(0.0, 1.0 - abs(progress - center) / radius))
+    return influence
+
+
 def _build_level_rows(
     level: TerraceLevel,
     lip: LipCurveDraft,
@@ -19,25 +41,41 @@ def _build_level_rows(
     lip_row: list[tuple[float, float, float]] = []
     drop_row: list[tuple[float, float, float]] = []
 
-    for point in lip_points:
+    for index, point in enumerate(lip_points):
         x, _y, z = point
+        progress = index / max(1, len(lip_points) - 1)
         surface_base = max(z, level.elevation)
+        width_wave = math.sin(progress * math.pi) * math.sin(progress * math.pi * 2.0 + level.level_index * 0.8)
+        erosion = abs(math.sin(progress * math.pi * 3.0 + level.level_index * 0.9)) * math.sin(progress * math.pi)
+        gap_carve = _gap_influence(progress, lip.continuity_segments)
+        lateral_sweep = (progress - 0.5) * level.terrace_depth * 0.14
+        terrace_y_offset = level.terrace_depth * 0.12 * width_wave - gap_carve * 0.18
+
         back_row.append(
             (
                 x * 1.06,
-                axis_y + level.terrace_depth * 0.95,
-                surface_base + level.terrace_depth * (0.16 + level.basin_strength * 0.14),
+                axis_y + level.terrace_depth * 0.95 + terrace_y_offset + lateral_sweep,
+                surface_base + level.terrace_depth * (0.16 + level.basin_strength * 0.14) - gap_carve * 0.08,
             )
         )
         upper_row.append(
             (
                 x * 1.02,
-                axis_y + level.terrace_depth * 0.45,
-                surface_base + level.terrace_depth * (0.08 + level.basin_strength * 0.08),
+                axis_y + level.terrace_depth * 0.45 + terrace_y_offset * 0.75 + lateral_sweep * 0.5,
+                surface_base
+                + level.terrace_depth * (0.08 + level.basin_strength * 0.08)
+                + erosion * 0.08
+                - gap_carve * 0.14,
             )
         )
-        lip_row.append((x, axis_y, z))
-        drop_row.append((x * 0.94, axis_y - (1.15 + 0.22 * level.level_index), z - drop_depth))
+        lip_row.append((x, axis_y + terrace_y_offset * 0.45, z - erosion * 0.18 - gap_carve * 0.22))
+        drop_row.append(
+            (
+                x * 0.94,
+                axis_y - (1.15 + 0.22 * level.level_index) + terrace_y_offset * 0.3,
+                z - drop_depth - gap_carve * 0.28,
+            )
+        )
 
     for blocker in blockers:
         for row_index, row in enumerate((back_row, upper_row, lip_row, drop_row)):

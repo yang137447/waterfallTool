@@ -121,6 +121,63 @@ def test_build_main_terrain_mesh_uses_blockers_to_shape_surface_profile():
     assert max(z_deltas) > 0.15
 
 
+def test_build_main_terrain_mesh_adds_surface_undulation_across_width():
+    blueprint = TerrainBlueprint(
+        axis_points=[(-4.0, 0.0, 4.0), (0.0, 0.0, 2.5), (4.0, 0.0, 4.0)],
+        level_count=3,
+        top_elevation=4.0,
+        total_drop=6.0,
+        base_width=8.0,
+        terrace_depth=2.8,
+        width_decay=0.1,
+        depth_decay=0.12,
+        lip_roundness=0.4,
+        gap_frequency=0.25,
+        blocker_density=0.0,
+        seed=7,
+    )
+    levels = build_terrace_levels(blueprint)
+    lips = build_lip_curves(levels, blueprint)
+
+    mesh = build_main_terrain_mesh(levels, lips, [])
+
+    row_width = len(lips[0].points)
+    upper_row = mesh.vertices[row_width : row_width * 2]
+    y_values = [vertex[1] for vertex in upper_row]
+    assert max(y_values) - min(y_values) > 0.12
+
+
+def test_build_main_terrain_mesh_carves_notch_where_lip_has_gap():
+    blueprint = TerrainBlueprint(
+        axis_points=[(-4.0, 0.0, 4.0), (0.0, 0.0, 2.5), (4.0, 0.0, 4.0)],
+        level_count=3,
+        top_elevation=4.0,
+        total_drop=6.0,
+        base_width=8.0,
+        terrace_depth=2.8,
+        width_decay=0.1,
+        depth_decay=0.12,
+        lip_roundness=0.4,
+        gap_frequency=0.25,
+        blocker_density=0.0,
+        seed=7,
+    )
+    levels = build_terrace_levels(blueprint)
+    lips = build_lip_curves(levels, blueprint)
+    gaps = build_gap_segments(lips, blueprint)
+    blockers = build_blocker_masses(levels, lips, gaps, blueprint)
+
+    mesh = build_main_terrain_mesh(levels, lips, blockers)
+
+    row_width = len(lips[0].points)
+    level_index = 1
+    level_start = level_index * row_width * 4
+    lip_row = mesh.vertices[level_start + row_width * 2 : level_start + row_width * 3]
+    notch_depth = lip_row[2][2]
+    shoulder_depth = max(lip_row[1][2], lip_row[3][2])
+    assert shoulder_depth - notch_depth > 0.18
+
+
 def test_build_main_terrain_mesh_requires_matching_levels_and_lips():
     levels = [TerraceLevel(level_index=0, elevation=0.0, terrace_depth=1.0, terrace_width=1.0, drop_height_to_next=0.5, basin_strength=0.5, lip_profile_mode="arc")]
     lips = [
