@@ -34,8 +34,6 @@ def test_layout_generation_creates_lips_gaps_and_blockers():
     assert gaps[0].level_index == 1
     assert len(blockers) == 2
     assert isinstance(lips[0].points, tuple)
-    axis_mid_y = blueprint.axis_points[1][1]
-    assert all(point[1] == axis_mid_y for point in lips[0].points)
     gap_freq = max(0.05, min(1.0, blueprint.gap_frequency))
     assert gaps[0].depth_strength == approx(0.65 * gap_freq)
     assert len(gaps) == len({gap.level_index for gap in gaps})
@@ -47,6 +45,32 @@ def test_layout_generation_creates_lips_gaps_and_blockers():
     assert blockers[0].height == approx(expected_height)
     assert blockers[0].forward_offset == approx(expected_forward)
     assert blockers[0].center[0] == approx(lips[1].points[0][0])
+
+
+def test_build_lip_curves_follows_axis_path_instead_of_single_midpoint():
+    blueprint = TerrainBlueprint(
+        axis_points=[(-4.0, -1.0, 4.0), (0.0, 0.0, 2.5), (4.0, 1.5, 4.0)],
+        level_count=3,
+        top_elevation=4.0,
+        total_drop=6.0,
+        base_width=8.0,
+        terrace_depth=2.8,
+        width_decay=0.1,
+        depth_decay=0.12,
+        lip_roundness=0.4,
+        gap_frequency=0.25,
+        blocker_density=0.3,
+        seed=7,
+    )
+    levels = build_terrace_levels(blueprint)
+
+    lips = build_lip_curves(levels, blueprint)
+
+    left_y = lips[0].points[0][1]
+    mid_y = lips[0].points[len(lips[0].points) // 2][1]
+    right_y = lips[0].points[-1][1]
+
+    assert left_y < mid_y < right_y
 
 
 def test_gap_segments_produces_single_gap_for_two_levels():

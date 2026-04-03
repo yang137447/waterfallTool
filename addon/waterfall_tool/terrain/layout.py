@@ -7,7 +7,9 @@ def build_lip_curves(levels: list[TerraceLevel], blueprint: TerrainBlueprint) ->
     if len(blueprint.axis_points) < 2:
         raise ValueError("TerrainBlueprint.axis_points must contain at least 2 entries to build lip curves")
 
-    axis_mid = blueprint.axis_points[1]
+    axis_start = blueprint.axis_points[0]
+    axis_mid = blueprint.axis_points[len(blueprint.axis_points) // 2]
+    axis_end = blueprint.axis_points[-1]
     roundness = max(0.1, min(1.0, blueprint.lip_roundness))
     first_end = 0.32 + 0.08 * roundness
     second_start = 0.45 + 0.05 * roundness
@@ -18,13 +20,13 @@ def build_lip_curves(levels: list[TerraceLevel], blueprint: TerrainBlueprint) ->
     for level in levels:
         half_width = level.terrace_width * 0.5
         point_list = (
-            (-half_width, 0.0, level.elevation + 0.18),
-            (-half_width * 0.45, 0.0, level.elevation + 0.05),
-            (0.0, 0.0, level.elevation - 0.12 * (level.level_index + 1)),
-            (half_width * 0.4, 0.0, level.elevation + 0.02),
-            (half_width, 0.0, level.elevation + 0.15),
+            (-half_width, axis_start[1], level.elevation + 0.18),
+            (-half_width * 0.45, (axis_start[1] + axis_mid[1]) * 0.5, level.elevation + 0.05),
+            (0.0, axis_mid[1], level.elevation - 0.12 * (level.level_index + 1)),
+            (half_width * 0.4, (axis_mid[1] + axis_end[1]) * 0.5, level.elevation + 0.02),
+            (half_width, axis_end[1], level.elevation + 0.15),
         )
-        points = tuple((point[0], axis_mid[1], point[2]) for point in point_list)
+        points = tuple(point_list)
         lips.append(
             LipCurveDraft(
                 level_index=level.level_index,
