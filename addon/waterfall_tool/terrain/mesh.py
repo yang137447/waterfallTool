@@ -22,7 +22,7 @@ def _gap_influence(progress: float, continuity_segments: tuple[tuple[float, floa
     influence = 0.0
     for start, end in _gap_spans(continuity_segments):
         center = (start + end) * 0.5
-        radius = max(0.08, (end - start) * 0.6)
+        radius = max(0.16, (end - start) * 1.35)
         influence = max(influence, max(0.0, 1.0 - abs(progress - center) / radius))
     return influence
 
@@ -49,30 +49,33 @@ def _build_level_rows(
         erosion = abs(math.sin(progress * math.pi * 3.0 + level.level_index * 0.9)) * math.sin(progress * math.pi)
         gap_carve = _gap_influence(progress, lip.continuity_segments)
         lateral_sweep = (progress - 0.5) * level.terrace_depth * 0.14
-        terrace_y_offset = level.terrace_depth * 0.12 * width_wave - gap_carve * 0.18
+        terrace_y_offset = level.terrace_depth * 0.12 * width_wave
+        gap_recess = gap_carve * (0.42 + 0.1 * level.level_index)
+        gap_upper_recess = gap_recess * 0.9
+        gap_drop_recess = gap_recess * 1.45
 
         back_row.append(
             (
                 x * 1.06,
-                axis_y + level.terrace_depth * 0.95 + terrace_y_offset + lateral_sweep,
+                axis_y + level.terrace_depth * 0.95 + terrace_y_offset + lateral_sweep + gap_upper_recess * 0.4,
                 surface_base + level.terrace_depth * (0.16 + level.basin_strength * 0.14) - gap_carve * 0.08,
             )
         )
         upper_row.append(
             (
                 x * 1.02,
-                axis_y + level.terrace_depth * 0.45 + terrace_y_offset * 0.75 + lateral_sweep * 0.5,
+                axis_y + level.terrace_depth * 0.45 + terrace_y_offset * 0.75 + lateral_sweep * 0.5 + gap_upper_recess,
                 surface_base
                 + level.terrace_depth * (0.08 + level.basin_strength * 0.08)
                 + erosion * 0.08
                 - gap_carve * 0.14,
             )
         )
-        lip_row.append((x, axis_y + terrace_y_offset * 0.45, z - erosion * 0.18 - gap_carve * 0.22))
+        lip_row.append((x, axis_y + terrace_y_offset * 0.45 + gap_recess, z - erosion * 0.18 - gap_carve * 0.22))
         drop_row.append(
             (
                 x * 0.94,
-                axis_y - (1.15 + 0.22 * level.level_index) + terrace_y_offset * 0.3,
+                axis_y - (1.15 + 0.22 * level.level_index) + terrace_y_offset * 0.3 + gap_drop_recess,
                 z - drop_depth - gap_carve * 0.28,
             )
         )

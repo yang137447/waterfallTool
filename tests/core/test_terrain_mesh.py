@@ -178,6 +178,36 @@ def test_build_main_terrain_mesh_carves_notch_where_lip_has_gap():
     assert shoulder_depth - notch_depth > 0.18
 
 
+def test_build_main_terrain_mesh_recesses_front_wall_at_gap():
+    blueprint = TerrainBlueprint(
+        axis_points=[(-4.0, 0.0, 4.0), (0.0, 0.0, 2.5), (4.0, 0.0, 4.0)],
+        level_count=3,
+        top_elevation=4.0,
+        total_drop=6.0,
+        base_width=8.0,
+        terrace_depth=2.8,
+        width_decay=0.1,
+        depth_decay=0.12,
+        lip_roundness=0.4,
+        gap_frequency=0.25,
+        blocker_density=0.0,
+        seed=7,
+    )
+    levels = build_terrace_levels(blueprint)
+    lips = build_lip_curves(levels, blueprint)
+    gaps = build_gap_segments(lips, blueprint)
+
+    mesh = build_main_terrain_mesh(levels, lips, build_blocker_masses(levels, lips, gaps, blueprint))
+
+    row_width = len(lips[0].points)
+    level_index = 1
+    level_start = level_index * row_width * 4
+    drop_row = mesh.vertices[level_start + row_width * 3 : level_start + row_width * 4]
+    center_y = drop_row[2][1]
+    shoulder_y = max(drop_row[1][1], drop_row[3][1])
+    assert center_y - shoulder_y > 0.12
+
+
 def test_build_main_terrain_mesh_requires_matching_levels_and_lips():
     levels = [TerraceLevel(level_index=0, elevation=0.0, terrace_depth=1.0, terrace_width=1.0, drop_height_to_next=0.5, basin_strength=0.5, lip_profile_mode="arc")]
     lips = [
