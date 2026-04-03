@@ -11,6 +11,7 @@ import bpy
 from mathutils import Vector
 
 import waterfall_tool
+from waterfall_tool.demo.framing import compute_demo_camera_frame
 
 
 CACHE_DIR = ROOT / "cache"
@@ -49,6 +50,28 @@ def create_material(name: str, color: tuple[float, float, float, float], roughne
     return material
 
 
+def world_bounds(obj: bpy.types.Object) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
+    corners = [obj.matrix_world @ Vector(corner) for corner in obj.bound_box]
+    return (
+        (min(corner.x for corner in corners), min(corner.y for corner in corners), min(corner.z for corner in corners)),
+        (max(corner.x for corner in corners), max(corner.y for corner in corners), max(corner.z for corner in corners)),
+    )
+
+
+def combined_bounds(objects: list[bpy.types.Object]) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
+    mins = []
+    maxs = []
+    for obj in objects:
+        min_corner, max_corner = world_bounds(obj)
+        mins.append(min_corner)
+        maxs.append(max_corner)
+
+    return (
+        (min(value[0] for value in mins), min(value[1] for value in mins), min(value[2] for value in mins)),
+        (max(value[0] for value in maxs), max(value[1] for value in maxs), max(value[2] for value in maxs)),
+    )
+
+
 def main() -> None:
     clear_scene()
     waterfall_tool.register()
@@ -69,9 +92,9 @@ def main() -> None:
     axis_curve.dimensions = "3D"
     axis_spline = axis_curve.splines.new("POLY")
     axis_points = [
-        (-4.0, 0.0, 4.6),
-        (0.0, 0.0, 4.75),
-        (4.0, 0.0, 4.55),
+        (-4.5, -2.2, 4.9),
+        (0.0, 0.35, 4.7),
+        (4.3, 2.6, 4.35),
     ]
     axis_spline.points.add(len(axis_points) - 1)
     for index, point in enumerate(axis_points):
@@ -144,6 +167,11 @@ def main() -> None:
     ribbon = require_object("WFT_MainSheet")
     ribbon.location.y = -0.06
     ribbon.data.materials.append(create_material("RibbonMat", (0.25, 0.74, 0.97, 1.0), roughness=0.15))
+
+    bounds_min, bounds_max = combined_bounds([terrain, ribbon, preview])
+    frame = compute_demo_camera_frame(bounds_min, bounds_max)
+    camera.location = frame.location
+    look_at(camera, Vector(frame.target))
 
     # Background renders have no screen; guard for UI usage.
     screen = getattr(bpy.context, "screen", None)

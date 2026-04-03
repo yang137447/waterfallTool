@@ -69,9 +69,9 @@ def create_demo_scene():
     axis_curve.dimensions = "3D"
     axis_spline = axis_curve.splines.new("POLY")
     axis_points = [
-        (-4.0, 0.0, 4.6),
-        (0.0, 0.0, 4.75),
-        (4.0, 0.0, 4.55),
+        (-4.5, -2.2, 4.9),
+        (0.0, 0.35, 4.7),
+        (4.3, 2.6, 4.35),
     ]
     axis_spline.points.add(len(axis_points) - 1)
     for index, point in enumerate(axis_points):
