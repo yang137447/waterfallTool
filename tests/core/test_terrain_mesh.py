@@ -28,12 +28,42 @@ def test_build_main_terrain_mesh_creates_faces_and_level_ids():
 
     mesh = build_main_terrain_mesh(levels, lips, blockers)
 
-    assert len(mesh.vertices) == 18
-    assert len(mesh.faces) == 6
+    # Each level should contribute a small terrace grid, not just two fan quads.
+    assert len(mesh.vertices) == 60
+    assert len(mesh.faces) == 36
     assert mesh.level_ids.count(0) > 0
     assert len(mesh.level_ids) == len(mesh.vertices)
     face_indices = [index for face in mesh.faces for index in face]
     assert max(face_indices) < len(mesh.vertices)
+    ys = [vertex[1] for vertex in mesh.vertices]
+    assert max(ys) > 2.0
+    assert min(ys) < -1.0
+
+
+def test_build_main_terrain_mesh_preserves_full_lip_sampling_per_level():
+    blueprint = TerrainBlueprint(
+        axis_points=[(-4.0, 0.0, 4.0), (0.0, 0.0, 2.5), (4.0, 0.0, 4.0)],
+        level_count=2,
+        top_elevation=4.0,
+        total_drop=3.0,
+        base_width=8.0,
+        terrace_depth=2.8,
+        width_decay=0.1,
+        depth_decay=0.12,
+        lip_roundness=0.4,
+        gap_frequency=0.25,
+        blocker_density=0.3,
+        seed=7,
+    )
+    levels = build_terrace_levels(blueprint)
+    lips = build_lip_curves(levels, blueprint)
+    blockers = build_blocker_masses(levels, lips, build_gap_segments(lips, blueprint), blueprint)
+
+    mesh = build_main_terrain_mesh(levels, lips, blockers)
+
+    row_width = len(lips[0].points)
+    rows_per_level = len(mesh.vertices) // len(levels) // row_width
+    assert rows_per_level == 4
 
 
 def test_build_main_terrain_mesh_requires_matching_levels_and_lips():
