@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from math import acos, ceil
 
 from .types import CurveSample, MeshSettings, TrajectoryPoint
@@ -32,6 +33,8 @@ def resample_polyline(
     for point in points:
         if not collapsed_points or length(sub(point.position, collapsed_points[-1].position)) > EPSILON:
             collapsed_points.append(point)
+        else:
+            collapsed_points[-1] = replace(point, position=collapsed_points[-1].position)
 
     if len(collapsed_points) == 1:
         point = collapsed_points[0]

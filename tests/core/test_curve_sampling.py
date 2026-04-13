@@ -62,3 +62,13 @@ def test_resample_polyline_preserves_earliest_anchor_for_near_duplicate_runs():
         curvature_refine_strength=0.0,
     )
     assert samples[0].position == (0.0, 0.0, 0.0)
+
+
+def test_resample_polyline_collapsed_anchor_uses_latest_speed_metadata():
+    samples = resample_polyline(
+        [point((0.0, 0.0, 0.0), 1.0), point((1.0e-12, 0.0, 0.0), 5.0), point((0.0, 0.0, -1.0), 7.0)],
+        base_segment_density=1.0,
+        curvature_refine_strength=0.0,
+    )
+    assert samples[0].position == (0.0, 0.0, 0.0)
+    assert samples[0].speed == 5.0
