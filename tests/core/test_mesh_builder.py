@@ -36,3 +36,14 @@ def test_speed_is_packed_into_uv1():
     uv1_values = [uv for face in mesh.uv1 for uv in face]
     assert min(value[1] for value in uv1_values) == 0.0
     assert max(value[1] for value in uv1_values) == 1.0
+
+
+def test_speed_normalization_uses_collapsed_samples():
+    settings = MeshSettings(start_width=1.0, end_width=1.0, uv_speed_scale=1.0)
+    mesh = build_x_card_mesh(
+        [point((0.0, 0.0, 0.0), 100.0), point((0.0, 0.0, 0.0), 1.0), point((0.0, 0.0, -1.0), 3.0)],
+        settings,
+    )
+    uv1_values = [uv for face in mesh.uv1 for uv in face]
+    assert min(value[1] for value in uv1_values) == 0.0
+    assert max(value[1] for value in uv1_values) == 1.0

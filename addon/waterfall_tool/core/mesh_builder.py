@@ -13,8 +13,7 @@ def _rotate_in_frame(normal: Vector3, binormal: Vector3, angle_degrees: float) -
     return add(scale(normal, cos(angle)), scale(binormal, sin(angle)))
 
 
-def _speed_range(points: list[TrajectoryPoint]) -> tuple[float, float]:
-    speeds = [point.speed for point in points]
+def _speed_range(speeds: list[float]) -> tuple[float, float]:
     if not speeds:
         return (0.0, 1.0)
     minimum = min(speeds)
@@ -35,7 +34,7 @@ def build_x_card_mesh(points: list[TrajectoryPoint], settings: MeshSettings) -> 
         return MeshData()
 
     frames = build_frames(samples)
-    speed_min, speed_max = _speed_range(points)
+    speed_min, speed_max = _speed_range([sample.speed for sample in samples])
     mesh = MeshData()
     strip_angles = (-settings.cross_angle_degrees * 0.5, settings.cross_angle_degrees * 0.5)
 
