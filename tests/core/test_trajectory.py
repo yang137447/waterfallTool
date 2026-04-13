@@ -1,3 +1,5 @@
+import pytest
+
 from waterfall_tool.core.trajectory import simulate_guided_trajectory, simulate_trajectory
 from waterfall_tool.core.types import CollisionProvider, CollisionSample, EmitterSettings
 
@@ -57,3 +59,11 @@ def test_guided_reflow_snaps_supported_points_to_surface():
     assert points[1].position[2] == 0.0
     assert points[2].position[2] == 0.0
     assert points[1].attached is True
+
+
+def test_guided_reflow_uses_settings_speed_when_guide_speeds_is_empty():
+    settings = EmitterSettings(speed=4.0, gravity=10.0, drag=0.0, time_step=0.1, step_count=4)
+    guide = [(0.0, 0.0, 1.0), (0.5, 0.0, 0.5), (1.0, 0.0, 0.0)]
+    points = simulate_guided_trajectory(guide, [], settings, NoCollision())
+    assert [point.position for point in points] == guide
+    assert [point.speed for point in points] == pytest.approx([4.0, 4.0, 4.0])

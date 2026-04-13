@@ -62,7 +62,11 @@ def simulate_guided_trajectory(
 
         previous = result[-1].position
         requested = guide_positions[index]
-        requested_speed = guide_speeds[index] if index < len(guide_speeds) else guide_speeds[-1]
+        requested_speed = (
+            guide_speeds[index]
+            if index < len(guide_speeds)
+            else (guide_speeds[-1] if guide_speeds else settings.speed)
+        )
         direction = normalize((requested[0] - previous[0], requested[1] - previous[1], requested[2] - previous[2]))
         collision = collision_provider.sample(previous, requested)
 
