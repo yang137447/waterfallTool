@@ -21,7 +21,12 @@ if bpy is not None:
                 self.report({"ERROR"}, "Select a flow curve before baking")
                 return {"CANCELLED"}
 
-            preview = refresh_curve_preview(curve, context)
+            preview = refresh_curve_preview(
+                curve,
+                context,
+                allow_when_preview_disabled=True,
+                force_visible=False,
+            )
             if preview is None:
                 self.report({"ERROR"}, "Preview is disabled or empty")
                 return {"CANCELLED"}

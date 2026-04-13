@@ -195,3 +195,49 @@ def test_refresh_curve_preview_returns_none_and_hides_existing_preview_for_empty
 
     assert result is None
     assert preview._hidden_calls == [True]
+
+
+def test_refresh_curve_preview_can_build_for_bake_while_preview_visibility_stays_hidden(monkeypatch):
+    rebuilt_preview = FakeObject("FlowCurve_Preview", "MESH", props={"waterfall_generated": True})
+    curve = FakeObject(
+        "FlowCurve",
+        "CURVE",
+        props={"waterfall_flow_curve": True},
+        waterfall_emitter=SimpleNamespace(),
+        waterfall_curve=SimpleNamespace(
+            preview_enabled=False,
+            curve_mode="MANUAL_SHAPE",
+            emitter_name="",
+            preview_mesh_name="FlowCurve_Preview",
+            baked_mesh_name="",
+            base_segment_density=1.0,
+            curvature_refine_strength=1.0,
+            start_width=1.0,
+            end_width=1.0,
+            width_falloff=1.0,
+            cross_angle=90.0,
+            uv_speed_scale=1.0,
+        ),
+    )
+
+    fake_bpy = SimpleNamespace(data=SimpleNamespace(objects={"FlowCurve_Preview": rebuilt_preview}))
+    monkeypatch.setattr(preview_ops, "bpy", fake_bpy)
+    monkeypatch.setattr(preview_ops, "build_x_card_mesh", lambda _points, _settings: MeshData(vertices=[(0.0, 0.0, 0.0)], faces=[(0, 0, 0, 0)]))
+    monkeypatch.setattr(
+        "waterfall_tool.adapters.blender_curve.read_flow_curve_points",
+        lambda _curve: ([(0.0, 0.0, 0.0), (0.0, 0.0, -1.0)], [1.0, 1.0]),
+    )
+    monkeypatch.setattr(
+        "waterfall_tool.adapters.blender_mesh.create_or_update_mesh_object",
+        lambda *_args, **_kwargs: rebuilt_preview,
+    )
+
+    result = refresh_curve_preview(
+        curve,
+        context=types.SimpleNamespace(),
+        allow_when_preview_disabled=True,
+        force_visible=False,
+    )
+
+    assert result is rebuilt_preview
+    assert rebuilt_preview._hidden_calls == [True]

@@ -93,13 +93,17 @@ def _scene_objects():
     return getattr(getattr(bpy, "data", None), "objects", None)
 
 
-def refresh_curve_preview(curve, context):
+def _should_build_preview_mesh(preview_enabled: bool, allow_when_preview_disabled: bool) -> bool:
+    return preview_enabled or allow_when_preview_disabled
+
+
+def refresh_curve_preview(curve, context, *, allow_when_preview_disabled: bool = False, force_visible: bool | None = None):
     from ..adapters.blender_curve import read_flow_curve_points
     from ..adapters.blender_mesh import create_or_update_mesh_object
     from ..adapters.blender_scene import BlenderVisibleMeshCollisionProvider
 
     props = curve.waterfall_curve
-    if not props.preview_enabled:
+    if not _should_build_preview_mesh(props.preview_enabled, allow_when_preview_disabled):
         set_preview_hidden(curve, _scene_objects(), hidden=True)
         return None
 
@@ -141,7 +145,8 @@ def refresh_curve_preview(curve, context):
         return None
     preview = create_or_update_mesh_object(context, preview_name, mesh, generated=True)
     props.preview_mesh_name = preview.name
-    _set_object_hidden(preview, False)
+    visible = props.preview_enabled if force_visible is None else bool(force_visible)
+    _set_object_hidden(preview, not visible)
     return preview
 
 
