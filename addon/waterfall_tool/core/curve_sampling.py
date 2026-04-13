@@ -27,9 +27,18 @@ def resample_polyline(
 ) -> list[CurveSample]:
     if not points:
         return []
-    if len(points) == 1:
-        point = points[0]
+
+    collapsed_points: list[TrajectoryPoint] = []
+    for point in points:
+        if not collapsed_points or point.position != collapsed_points[-1].position:
+            collapsed_points.append(point)
+        else:
+            collapsed_points[-1] = point
+
+    if len(collapsed_points) == 1:
+        point = collapsed_points[0]
         return [CurveSample(position=point.position, tangent=(0.0, 0.0, -1.0), speed=point.speed, arc_length=0.0, t=0.0)]
+    points = collapsed_points
 
     segment_lengths: list[float] = []
     total_length = 0.0

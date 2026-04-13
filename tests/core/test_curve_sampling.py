@@ -31,3 +31,16 @@ def test_curvature_adds_more_samples_near_bends():
     straight_samples = resample_polyline(straight, base_segment_density=1.0, curvature_refine_strength=2.0)
     bent_samples = resample_polyline(bent, base_segment_density=1.0, curvature_refine_strength=2.0)
     assert len(bent_samples) > len(straight_samples)
+
+
+def test_resample_polyline_collapses_fully_degenerate_input_to_single_safe_sample():
+    samples = resample_polyline(
+        [point((1.0, 2.0, 3.0), 2.0), point((1.0, 2.0, 3.0), 4.0)],
+        base_segment_density=2.0,
+        curvature_refine_strength=1.0,
+    )
+    assert len(samples) == 1
+    assert samples[0].position == (1.0, 2.0, 3.0)
+    assert samples[0].tangent == (0.0, 0.0, -1.0)
+    assert samples[0].arc_length == 0.0
+    assert samples[0].t == 0.0
