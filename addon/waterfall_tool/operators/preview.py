@@ -10,6 +10,13 @@ from ..core.trajectory import simulate_guided_trajectory
 from ..core.types import EmitterSettings, MeshSettings, TrajectoryPoint
 
 
+def apply_persistent_handler(handler, bpy_module):
+    persistent = getattr(getattr(getattr(bpy_module, "app", None), "handlers", None), "persistent", None)
+    if callable(persistent):
+        return persistent(handler)
+    return handler
+
+
 def _lookup_object(data_objects, name: str):
     if not name:
         return None
@@ -60,6 +67,16 @@ def set_preview_hidden(curve, data_objects, hidden: bool):
     return preview
 
 
+def is_preview_mesh_empty(mesh) -> bool:
+    vertices = getattr(mesh, "vertices", ())
+    faces = getattr(mesh, "faces", ())
+    return not vertices or not faces
+
+
+def _scene_objects():
+    return getattr(getattr(bpy, "data", None), "objects", None)
+
+
 def refresh_curve_preview(curve, context):
     from ..adapters.blender_curve import read_flow_curve_points
     from ..adapters.blender_mesh import create_or_update_mesh_object
@@ -67,7 +84,7 @@ def refresh_curve_preview(curve, context):
 
     props = curve.waterfall_curve
     if not props.preview_enabled:
-        set_preview_hidden(curve, bpy.data.objects, hidden=True)
+        set_preview_hidden(curve, _scene_objects(), hidden=True)
         return None
 
     positions, speeds = read_flow_curve_points(curve)
@@ -103,6 +120,9 @@ def refresh_curve_preview(curve, context):
     )
     preview_name = props.preview_mesh_name or f"{curve.name}_Preview"
     mesh = build_x_card_mesh(points, mesh_settings)
+    if is_preview_mesh_empty(mesh):
+        set_preview_hidden(curve, _scene_objects(), hidden=True)
+        return None
     preview = create_or_update_mesh_object(context, preview_name, mesh, generated=True)
     props.preview_mesh_name = preview.name
     _set_object_hidden(preview, False)
@@ -117,6 +137,7 @@ if bpy is not None:
             obj = getattr(update, "id", None)
             if getattr(obj, "type", None) == "CURVE" and obj.get("waterfall_flow_curve"):
                 refresh_curve_preview(obj, context)
+    depsgraph_refresh = apply_persistent_handler(depsgraph_refresh, bpy)
 
 
     class WATERFALL_OT_rebuild_preview(bpy.types.Operator):
