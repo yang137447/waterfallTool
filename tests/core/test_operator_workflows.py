@@ -62,6 +62,19 @@ def test_resolve_emitter_curve_targets_handles_selected_emitter_or_curve():
     assert selected_curve == (emitter, curve)
 
 
+def test_resolve_emitter_curve_targets_rejects_non_empty_objects_as_emitters():
+    non_emitter = FakeObject(
+        "PreviewMesh",
+        "MESH",
+        waterfall_emitter=SimpleNamespace(flow_curve_name=""),
+        waterfall_curve=SimpleNamespace(),
+    )
+
+    selected = resolve_emitter_curve_targets(non_emitter, {"PreviewMesh": non_emitter})
+
+    assert selected == (None, None)
+
+
 def test_set_preview_hidden_toggles_existing_preview_object_visibility():
     preview = FakeObject("FlowCurve_Preview", "MESH")
     curve = FakeObject(

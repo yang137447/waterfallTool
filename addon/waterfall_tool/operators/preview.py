@@ -26,6 +26,10 @@ def _lookup_object(data_objects, name: str):
     return getter(name)
 
 
+def _is_emitter_object(obj) -> bool:
+    return getattr(obj, "type", None) == "EMPTY"
+
+
 def resolve_emitter_curve_targets(selected_obj, data_objects):
     if selected_obj is None:
         return (None, None)
@@ -40,7 +44,12 @@ def resolve_emitter_curve_targets(selected_obj, data_objects):
         curve = selected_obj
         curve_props = getattr(curve, "waterfall_curve", None)
         emitter = _lookup_object(data_objects, getattr(curve_props, "emitter_name", ""))
+        if not _is_emitter_object(emitter):
+            emitter = None
         return (emitter, curve)
+
+    if not _is_emitter_object(selected_obj):
+        return (None, None)
 
     emitter = selected_obj
     emitter_props = getattr(emitter, "waterfall_emitter", None)
