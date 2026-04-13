@@ -1,1 +1,10 @@
 .worktrees/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.blend1
+*.blend2
+*.blend@
+*.tmp

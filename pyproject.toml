@@ -1,0 +1,4 @@
+[tool.pytest.ini_options]
+pythonpath = ["addon"]
+testpaths = ["tests"]
+addopts = "-q"
