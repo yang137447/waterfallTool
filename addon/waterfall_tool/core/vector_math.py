@@ -16,11 +16,7 @@ def sub(a: Vector3, b: Vector3) -> Vector3:
 
 
 def scale(v: Vector3, scalar: float) -> Vector3:
-    return (
-        float(f"{v[0] * scalar:.12g}"),
-        float(f"{v[1] * scalar:.12g}"),
-        float(f"{v[2] * scalar:.12g}"),
-    )
+    return (v[0] * scalar, v[1] * scalar, v[2] * scalar)
 
 
 def dot(a: Vector3, b: Vector3) -> float:
