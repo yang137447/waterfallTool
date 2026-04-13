@@ -5,6 +5,7 @@ from ..core.types import TrajectoryPoint
 
 def create_or_update_flow_curve(context, name: str, points: list[TrajectoryPoint]):
     import bpy
+    import mathutils
 
     curve_obj = bpy.data.objects.get(name)
     if curve_obj is None:
@@ -18,8 +19,10 @@ def create_or_update_flow_curve(context, name: str, points: list[TrajectoryPoint
 
     spline = curve_data.splines.new("POLY")
     spline.points.add(max(0, len(points) - 1))
+    world_to_local = curve_obj.matrix_world.inverted()
     for spline_point, trajectory_point in zip(spline.points, points, strict=True):
-        x, y, z = trajectory_point.position
+        local_position = world_to_local @ mathutils.Vector(trajectory_point.position)
+        x, y, z = local_position
         spline_point.co = (x, y, z, 1.0)
 
     curve_obj["waterfall_flow_curve"] = True

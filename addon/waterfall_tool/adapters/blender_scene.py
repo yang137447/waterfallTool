@@ -39,7 +39,7 @@ class BlenderVisibleMeshCollisionProvider(CollisionProvider):
             if not hit:
                 continue
             world_location = evaluated.matrix_world @ location
-            world_normal = (evaluated.matrix_world.to_3x3() @ normal).normalized()
+            world_normal = (evaluated.matrix_world.to_3x3().inverted().transposed() @ normal).normalized()
             hit_distance = (world_location - mathutils.Vector(start)).length
             if best_hit is None or hit_distance < best_hit[0]:
                 best_hit = (hit_distance, world_location, world_normal)

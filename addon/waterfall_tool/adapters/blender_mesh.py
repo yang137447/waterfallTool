@@ -5,6 +5,7 @@ from ..core.types import MeshData
 
 def create_or_update_mesh_object(context, name: str, mesh_data: MeshData, *, generated: bool = True):
     import bpy
+    import mathutils
 
     obj = bpy.data.objects.get(name)
     if obj is None:
@@ -15,7 +16,10 @@ def create_or_update_mesh_object(context, name: str, mesh_data: MeshData, *, gen
         blender_mesh = obj.data
         blender_mesh.clear_geometry()
 
-    blender_mesh.from_pydata(mesh_data.vertices, [], mesh_data.faces)
+    world_to_local = obj.matrix_world.inverted()
+    local_vertices = [tuple(world_to_local @ mathutils.Vector(vertex)) for vertex in mesh_data.vertices]
+
+    blender_mesh.from_pydata(local_vertices, [], mesh_data.faces)
     blender_mesh.update()
 
     if mesh_data.uv0:
