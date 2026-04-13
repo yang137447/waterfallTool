@@ -53,3 +53,12 @@ def test_resample_polyline_collapses_near_duplicate_positions_with_epsilon_thres
         curvature_refine_strength=0.0,
     )
     assert samples[0].tangent != (0.0, 0.0, 0.0)
+
+
+def test_resample_polyline_preserves_earliest_anchor_for_near_duplicate_runs():
+    samples = resample_polyline(
+        [point((0.0, 0.0, 0.0)), point((9.0e-9, 0.0, 0.0)), point((1.8e-8, 0.0, 0.0)), point((0.0, 0.0, -1.0))],
+        base_segment_density=1.0,
+        curvature_refine_strength=0.0,
+    )
+    assert samples[0].position == (0.0, 0.0, 0.0)

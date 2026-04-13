@@ -32,8 +32,6 @@ def resample_polyline(
     for point in points:
         if not collapsed_points or length(sub(point.position, collapsed_points[-1].position)) > EPSILON:
             collapsed_points.append(point)
-        else:
-            collapsed_points[-1] = point
 
     if len(collapsed_points) == 1:
         point = collapsed_points[0]
