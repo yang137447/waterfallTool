@@ -213,3 +213,16 @@ def test_collision_sample_transforms_normal_with_inverse_transpose(monkeypatch):
 
     assert sample.hit is True
     assert sample.normal == (0.4472135954999579, 0.8944271909999159, 0.0)
+
+
+def test_create_or_update_flow_curve_accepts_empty_points(monkeypatch):
+    curve_obj = FakeObject("Flow", FakeCurveData(), FakeMatrixWorld())
+    fake_bpy = types.SimpleNamespace(data=types.SimpleNamespace(objects=FakeBpyObjects({"Flow": curve_obj})))
+    monkeypatch.setitem(sys.modules, "bpy", fake_bpy)
+    monkeypatch.setitem(sys.modules, "mathutils", types.SimpleNamespace(Vector=FakeVector))
+
+    result = create_or_update_flow_curve(context=None, name="Flow", points=[])
+
+    assert result is curve_obj
+    assert curve_obj.get("waterfall_flow_curve") is True
+    assert curve_obj.get("waterfall_speed_cache") == []

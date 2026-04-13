@@ -17,13 +17,14 @@ def create_or_update_flow_curve(context, name: str, points: list[TrajectoryPoint
         curve_data = curve_obj.data
         curve_data.splines.clear()
 
-    spline = curve_data.splines.new("POLY")
-    spline.points.add(max(0, len(points) - 1))
-    world_to_local = curve_obj.matrix_world.inverted()
-    for spline_point, trajectory_point in zip(spline.points, points, strict=True):
-        local_position = world_to_local @ mathutils.Vector(trajectory_point.position)
-        x, y, z = local_position
-        spline_point.co = (x, y, z, 1.0)
+    if points:
+        spline = curve_data.splines.new("POLY")
+        spline.points.add(max(0, len(points) - 1))
+        world_to_local = curve_obj.matrix_world.inverted()
+        for spline_point, trajectory_point in zip(spline.points, points, strict=True):
+            local_position = world_to_local @ mathutils.Vector(trajectory_point.position)
+            x, y, z = local_position
+            spline_point.co = (x, y, z, 1.0)
 
     curve_obj["waterfall_flow_curve"] = True
     curve_obj["waterfall_speed_cache"] = [point.speed for point in points]
