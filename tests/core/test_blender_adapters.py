@@ -106,32 +106,78 @@ class FakeSplines(list):
 
 class FakeCurveData:
     def __init__(self):
+        self.dimensions = "3D"
         self.splines = FakeSplines()
+
+
+class FakeUVLoop:
+    def __init__(self):
+        self.uv = (0.0, 0.0)
+
+
+class FakeUVLayer:
+    def __init__(self, name, loop_count):
+        self.name = name
+        self.data = [FakeUVLoop() for _ in range(loop_count)]
+
+
+class FakeUVLayers:
+    def __init__(self, mesh):
+        self._mesh = mesh
+        self._layers = []
+
+    def new(self, name):
+        layer = FakeUVLayer(name, self._mesh.loop_count)
+        self._layers.append(layer)
+        return layer
+
+    def remove(self, layer):
+        self._layers.remove(layer)
+
+    def __len__(self):
+        return len(self._layers)
+
+    def __iter__(self):
+        return iter(self._layers)
+
+    def __getitem__(self, index):
+        return self._layers[index]
 
 
 class FakeMesh:
     def __init__(self):
         self.vertices_written = None
         self.faces_written = None
-        self.uv_layers = types.SimpleNamespace(new=lambda name: None)
+        self.loop_count = 0
+        self.uv_layers = FakeUVLayers(self)
 
     def clear_geometry(self):
         self.vertices_written = None
         self.faces_written = None
+        self.loop_count = 0
 
     def from_pydata(self, vertices, _edges, faces):
         self.vertices_written = list(vertices)
         self.faces_written = list(faces)
+        self.loop_count = sum(len(face) for face in faces)
 
     def update(self):
         return None
 
 
 class FakeObject:
-    def __init__(self, name, data, matrix_world):
+    def __init__(self, name, data, matrix_world, object_type=None):
         self.name = name
         self.data = data
         self.matrix_world = matrix_world
+        if object_type is None:
+            if isinstance(data, FakeMesh):
+                object_type = "MESH"
+            elif isinstance(data, FakeCurveData):
+                object_type = "CURVE"
+            else:
+                object_type = "EMPTY"
+        self.type = object_type
         self._props = {}
 
     def __setitem__(self, key, value):
@@ -143,14 +189,55 @@ class FakeObject:
 
 class FakeBpyObjects:
     def __init__(self, objects):
-        self._objects = objects
+        self._objects = dict(objects)
 
     def get(self, name):
         return self._objects.get(name)
 
+    def _next_name(self, base_name):
+        if base_name not in self._objects:
+            return base_name
+        index = 1
+        while True:
+            candidate = f"{base_name}.{index:03d}"
+            if candidate not in self._objects:
+                return candidate
+            index += 1
+
+    def new(self, name, data):
+        actual_name = self._next_name(name)
+        obj = FakeObject(actual_name, data, FakeMatrixWorld())
+        self._objects[actual_name] = obj
+        return obj
+
+
+class FakeBpyCurves:
+    def new(self, name, type):
+        assert type == "CURVE"
+        return FakeCurveData()
+
+
+class FakeBpyMeshes:
+    def new(self, _name):
+        return FakeMesh()
+
+
+class FakeCollectionObjects:
+    def __init__(self):
+        self.linked = []
+
+    def link(self, obj):
+        self.linked.append(obj)
+
+
+class FakeContext:
+    def __init__(self):
+        self.collection = types.SimpleNamespace(objects=FakeCollectionObjects())
+
 
 def test_create_or_update_flow_curve_writes_local_positions_on_existing_object(monkeypatch):
     curve_obj = FakeObject("Flow", FakeCurveData(), FakeMatrixWorld(sx=2.0, sy=1.0, sz=1.0))
+    curve_obj["waterfall_flow_curve"] = True
     fake_bpy = types.SimpleNamespace(data=types.SimpleNamespace(objects=FakeBpyObjects({"Flow": curve_obj})))
     monkeypatch.setitem(sys.modules, "bpy", fake_bpy)
     monkeypatch.setitem(sys.modules, "mathutils", types.SimpleNamespace(Vector=FakeVector))
@@ -165,6 +252,7 @@ def test_create_or_update_flow_curve_writes_local_positions_on_existing_object(m
 def test_create_or_update_mesh_object_writes_local_vertices_on_existing_object(monkeypatch):
     mesh = FakeMesh()
     obj = FakeObject("Waterfall", mesh, FakeMatrixWorld(sx=2.0, sy=1.0, sz=1.0))
+    obj["waterfall_generated"] = True
     fake_bpy = types.SimpleNamespace(data=types.SimpleNamespace(objects=FakeBpyObjects({"Waterfall": obj})))
     monkeypatch.setitem(sys.modules, "bpy", fake_bpy)
     monkeypatch.setitem(sys.modules, "mathutils", types.SimpleNamespace(Vector=FakeVector))
@@ -173,6 +261,63 @@ def test_create_or_update_mesh_object_writes_local_vertices_on_existing_object(m
     create_or_update_mesh_object(context=None, name="Waterfall", mesh_data=mesh_data)
 
     assert mesh.vertices_written == [(2.0, 0.0, 0.0)]
+
+
+def test_create_or_update_mesh_object_repeated_updates_do_not_duplicate_uv_layers(monkeypatch):
+    mesh = FakeMesh()
+    obj = FakeObject("Waterfall", mesh, FakeMatrixWorld(sx=2.0, sy=1.0, sz=1.0))
+    obj["waterfall_generated"] = True
+    objects = FakeBpyObjects({"Waterfall": obj})
+    fake_bpy = types.SimpleNamespace(data=types.SimpleNamespace(objects=objects, meshes=FakeBpyMeshes()))
+    monkeypatch.setitem(sys.modules, "bpy", fake_bpy)
+    monkeypatch.setitem(sys.modules, "mathutils", types.SimpleNamespace(Vector=FakeVector))
+
+    mesh_data = MeshData(
+        vertices=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 1.0, 0.0), (0.0, 1.0, 0.0)],
+        faces=[(0, 1, 2, 3)],
+        uv0=[[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]],
+        uv1=[[(0.1, 0.1), (0.9, 0.1), (0.9, 0.9), (0.1, 0.9)]],
+    )
+    context = FakeContext()
+
+    create_or_update_mesh_object(context=context, name="Waterfall", mesh_data=mesh_data)
+    create_or_update_mesh_object(context=context, name="Waterfall", mesh_data=mesh_data)
+
+    assert [layer.name for layer in mesh.uv_layers] == ["UV0", "UV1_Speed"]
+
+
+def test_create_or_update_flow_curve_does_not_mutate_unowned_conflicting_object(monkeypatch):
+    conflicting = FakeObject("Flow", FakeMesh(), FakeMatrixWorld(), object_type="MESH")
+    objects = FakeBpyObjects({"Flow": conflicting})
+    fake_bpy = types.SimpleNamespace(
+        data=types.SimpleNamespace(objects=objects, curves=FakeBpyCurves()),
+    )
+    monkeypatch.setitem(sys.modules, "bpy", fake_bpy)
+    monkeypatch.setitem(sys.modules, "mathutils", types.SimpleNamespace(Vector=FakeVector))
+
+    points = [TrajectoryPoint(position=(1.0, 0.0, 0.0), velocity=(0.0, 0.0, 0.0), speed=1.0)]
+    context = FakeContext()
+    result = create_or_update_flow_curve(context=context, name="Flow", points=points)
+
+    assert result is not conflicting
+    assert conflicting.get("waterfall_flow_curve") is None
+
+
+def test_create_or_update_mesh_object_does_not_mutate_unowned_conflicting_object(monkeypatch):
+    conflicting = FakeObject("Waterfall", FakeCurveData(), FakeMatrixWorld(), object_type="CURVE")
+    objects = FakeBpyObjects({"Waterfall": conflicting})
+    fake_bpy = types.SimpleNamespace(
+        data=types.SimpleNamespace(objects=objects, meshes=FakeBpyMeshes()),
+    )
+    monkeypatch.setitem(sys.modules, "bpy", fake_bpy)
+    monkeypatch.setitem(sys.modules, "mathutils", types.SimpleNamespace(Vector=FakeVector))
+
+    mesh_data = MeshData(vertices=[(1.0, 0.0, 0.0)], faces=[])
+    context = FakeContext()
+    result = create_or_update_mesh_object(context=context, name="Waterfall", mesh_data=mesh_data)
+
+    assert result is not conflicting
+    assert conflicting.get("waterfall_generated") is None
 
 
 def test_collision_sample_transforms_normal_with_inverse_transpose(monkeypatch):
@@ -217,6 +362,7 @@ def test_collision_sample_transforms_normal_with_inverse_transpose(monkeypatch):
 
 def test_create_or_update_flow_curve_accepts_empty_points(monkeypatch):
     curve_obj = FakeObject("Flow", FakeCurveData(), FakeMatrixWorld())
+    curve_obj["waterfall_flow_curve"] = True
     fake_bpy = types.SimpleNamespace(data=types.SimpleNamespace(objects=FakeBpyObjects({"Flow": curve_obj})))
     monkeypatch.setitem(sys.modules, "bpy", fake_bpy)
     monkeypatch.setitem(sys.modules, "mathutils", types.SimpleNamespace(Vector=FakeVector))

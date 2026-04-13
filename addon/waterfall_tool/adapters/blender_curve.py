@@ -8,14 +8,14 @@ def create_or_update_flow_curve(context, name: str, points: list[TrajectoryPoint
     import mathutils
 
     curve_obj = bpy.data.objects.get(name)
-    if curve_obj is None:
+    if _can_reuse_flow_curve_object(curve_obj):
+        curve_data = curve_obj.data
+        curve_data.splines.clear()
+    else:
         curve_data = bpy.data.curves.new(name=name, type="CURVE")
         curve_data.dimensions = "3D"
         curve_obj = bpy.data.objects.new(name, curve_data)
         context.collection.objects.link(curve_obj)
-    else:
-        curve_data = curve_obj.data
-        curve_data.splines.clear()
 
     if points:
         spline = curve_data.splines.new("POLY")
@@ -29,6 +29,17 @@ def create_or_update_flow_curve(context, name: str, points: list[TrajectoryPoint
     curve_obj["waterfall_flow_curve"] = True
     curve_obj["waterfall_speed_cache"] = [point.speed for point in points]
     return curve_obj
+
+
+def _can_reuse_flow_curve_object(curve_obj) -> bool:
+    if curve_obj is None:
+        return False
+    if getattr(curve_obj, "type", None) != "CURVE":
+        return False
+    if not curve_obj.get("waterfall_flow_curve"):
+        return False
+    curve_data = getattr(curve_obj, "data", None)
+    return hasattr(curve_data, "splines")
 
 
 def read_flow_curve_points(curve_obj) -> tuple[list[tuple[float, float, float]], list[float]]:

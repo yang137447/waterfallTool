@@ -8,19 +8,20 @@ def create_or_update_mesh_object(context, name: str, mesh_data: MeshData, *, gen
     import mathutils
 
     obj = bpy.data.objects.get(name)
-    if obj is None:
+    if _can_reuse_generated_mesh_object(obj):
+        blender_mesh = obj.data
+        blender_mesh.clear_geometry()
+    else:
         blender_mesh = bpy.data.meshes.new(name)
         obj = bpy.data.objects.new(name, blender_mesh)
         context.collection.objects.link(obj)
-    else:
-        blender_mesh = obj.data
-        blender_mesh.clear_geometry()
 
     world_to_local = obj.matrix_world.inverted()
     local_vertices = [tuple(world_to_local @ mathutils.Vector(vertex)) for vertex in mesh_data.vertices]
 
     blender_mesh.from_pydata(local_vertices, [], mesh_data.faces)
     blender_mesh.update()
+    _clear_uv_layers(blender_mesh)
 
     if mesh_data.uv0:
         uv0 = blender_mesh.uv_layers.new(name="UV0")
@@ -31,6 +32,22 @@ def create_or_update_mesh_object(context, name: str, mesh_data: MeshData, *, gen
 
     obj["waterfall_generated"] = generated
     return obj
+
+
+def _can_reuse_generated_mesh_object(obj) -> bool:
+    if obj is None:
+        return False
+    if getattr(obj, "type", None) != "MESH":
+        return False
+    if not obj.get("waterfall_generated"):
+        return False
+    mesh = getattr(obj, "data", None)
+    return all(hasattr(mesh, attr) for attr in ("clear_geometry", "from_pydata", "uv_layers"))
+
+
+def _clear_uv_layers(blender_mesh):
+    while len(blender_mesh.uv_layers):
+        blender_mesh.uv_layers.remove(blender_mesh.uv_layers[0])
 
 
 def _write_uv_layer(layer, face_uvs):
