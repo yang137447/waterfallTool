@@ -8,17 +8,19 @@ Vector2 = tuple[float, float]
 
 @dataclass(frozen=True)
 class EmitterSettings:
-    speed: float = 4.0
-    gravity: float = 10.0
+    speed: float = 8.0
+    gravity: float = 9.81
     drag: float = 0.0
-    time_step: float = 0.1
-    step_count: int = 24
-    attach_strength: float = 0.5
-    detach_threshold: float = 0.25
+    time_step: float = 0.05
+    step_count: int = 80
+    attach_strength: float = 0.7
+    detach_threshold: float = 0.35
 
 
 @dataclass(frozen=True)
 class MeshSettings:
+    base_segment_density: float = 1.0
+    curvature_refine_strength: float = 1.0
     start_width: float = 1.0
     end_width: float = 1.0
     width_falloff: float = 1.0
@@ -28,7 +30,7 @@ class MeshSettings:
 
 @dataclass(frozen=True)
 class CollisionSample:
-    hit: bool = False
+    hit: bool
     point: Vector3 = (0.0, 0.0, 0.0)
     normal: Vector3 = (0.0, 0.0, 1.0)
     support: float = 0.0
@@ -61,9 +63,9 @@ class Frame:
 @dataclass(frozen=True)
 class MeshData:
     vertices: list[Vector3] = field(default_factory=list)
-    faces: list[tuple[int, int, int]] = field(default_factory=list)
-    uvs: list[Vector2] = field(default_factory=list)
-    vertex_colors: list[float] = field(default_factory=list)
+    faces: list[tuple[int, int, int, int]] = field(default_factory=list)
+    uv0: list[list[Vector2]] = field(default_factory=list)
+    uv1: list[list[Vector2]] = field(default_factory=list)
 
 
 class CollisionProvider:
