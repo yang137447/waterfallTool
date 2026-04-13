@@ -30,16 +30,24 @@ def _classes() -> list[type]:
 def register() -> None:
     import bpy
 
+    from .operators.preview import depsgraph_refresh
+
     classes = _classes()
     for cls in classes:
         bpy.utils.register_class(cls)
     bpy.types.Object.waterfall_emitter = bpy.props.PointerProperty(type=classes[0])
     bpy.types.Object.waterfall_curve = bpy.props.PointerProperty(type=classes[1])
+    if depsgraph_refresh not in bpy.app.handlers.depsgraph_update_post:
+        bpy.app.handlers.depsgraph_update_post.append(depsgraph_refresh)
 
 
 def unregister() -> None:
     import bpy
 
+    from .operators.preview import depsgraph_refresh
+
+    if depsgraph_refresh in bpy.app.handlers.depsgraph_update_post:
+        bpy.app.handlers.depsgraph_update_post.remove(depsgraph_refresh)
     if hasattr(bpy.types.Object, "waterfall_curve"):
         del bpy.types.Object.waterfall_curve
     if hasattr(bpy.types.Object, "waterfall_emitter"):
