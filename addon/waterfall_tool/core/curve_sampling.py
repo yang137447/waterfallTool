@@ -3,7 +3,7 @@ from __future__ import annotations
 from math import acos, ceil
 
 from .types import CurveSample, MeshSettings, TrajectoryPoint
-from .vector_math import dot, length, lerp, normalize, sub
+from .vector_math import EPSILON, dot, length, lerp, normalize, sub
 
 
 def compute_width(settings: MeshSettings, normalized_t: float) -> float:
@@ -30,7 +30,7 @@ def resample_polyline(
 
     collapsed_points: list[TrajectoryPoint] = []
     for point in points:
-        if not collapsed_points or point.position != collapsed_points[-1].position:
+        if not collapsed_points or length(sub(point.position, collapsed_points[-1].position)) > EPSILON:
             collapsed_points.append(point)
         else:
             collapsed_points[-1] = point

@@ -44,3 +44,12 @@ def test_resample_polyline_collapses_fully_degenerate_input_to_single_safe_sampl
     assert samples[0].tangent == (0.0, 0.0, -1.0)
     assert samples[0].arc_length == 0.0
     assert samples[0].t == 0.0
+
+
+def test_resample_polyline_collapses_near_duplicate_positions_with_epsilon_threshold():
+    samples = resample_polyline(
+        [point((0.0, 0.0, 0.0)), point((1.0e-12, 0.0, 0.0)), point((0.0, 0.0, -1.0))],
+        base_segment_density=1.0,
+        curvature_refine_strength=0.0,
+    )
+    assert samples[0].tangent != (0.0, 0.0, 0.0)
