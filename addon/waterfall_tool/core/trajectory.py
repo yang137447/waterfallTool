@@ -42,3 +42,35 @@ def simulate_trajectory(
         points.append(TrajectoryPoint(position=position, velocity=velocity, speed=length(velocity), attached=False))
 
     return points
+
+
+def simulate_guided_trajectory(
+    guide_positions: list[Vector3],
+    guide_speeds: list[float],
+    settings: EmitterSettings,
+    collision_provider: CollisionProvider,
+) -> list[TrajectoryPoint]:
+    if not guide_positions:
+        return []
+
+    result: list[TrajectoryPoint] = []
+    for index, position in enumerate(guide_positions):
+        if index == 0:
+            speed = guide_speeds[0] if guide_speeds else settings.speed
+            result.append(TrajectoryPoint(position=position, velocity=(0.0, 0.0, 0.0), speed=speed, attached=False))
+            continue
+
+        previous = result[-1].position
+        requested = guide_positions[index]
+        requested_speed = guide_speeds[index] if index < len(guide_speeds) else guide_speeds[-1]
+        direction = normalize((requested[0] - previous[0], requested[1] - previous[1], requested[2] - previous[2]))
+        collision = collision_provider.sample(previous, requested)
+
+        if collision.hit and collision.support * settings.attach_strength >= settings.detach_threshold:
+            velocity = project_on_plane(scale(direction, requested_speed), collision.normal)
+            result.append(TrajectoryPoint(position=collision.point, velocity=velocity, speed=length(velocity), attached=True))
+        else:
+            velocity = scale(direction, requested_speed)
+            result.append(TrajectoryPoint(position=requested, velocity=velocity, speed=length(velocity), attached=False))
+
+    return result

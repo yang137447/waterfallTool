@@ -1,4 +1,4 @@
-from waterfall_tool.core.trajectory import simulate_trajectory
+from waterfall_tool.core.trajectory import simulate_guided_trajectory, simulate_trajectory
 from waterfall_tool.core.types import CollisionProvider, CollisionSample, EmitterSettings
 
 
@@ -41,3 +41,19 @@ def test_weak_support_detaches_and_keeps_falling():
     points = simulate_trajectory((0.0, 0.0, 1.0), (1.0, 0.0, 0.0), settings, WeakSupportCollision())
     assert all(point.attached is False for point in points[1:])
     assert points[-1].velocity[2] < 0.0
+
+
+def test_guided_reflow_keeps_manual_points_when_there_is_no_collision():
+    settings = EmitterSettings(speed=4.0, gravity=10.0, drag=0.0, time_step=0.1, step_count=4)
+    guide = [(0.0, 0.0, 1.0), (0.5, 0.0, 0.5), (1.0, 0.0, 0.0)]
+    points = simulate_guided_trajectory(guide, [4.0, 3.0, 2.0], settings, NoCollision())
+    assert [point.position for point in points] == guide
+
+
+def test_guided_reflow_snaps_supported_points_to_surface():
+    settings = EmitterSettings(speed=4.0, gravity=10.0, drag=0.0, time_step=0.1, step_count=4, attach_strength=1.0)
+    guide = [(0.0, 0.0, 1.0), (0.5, 0.0, -0.5), (1.0, 0.0, -1.0)]
+    points = simulate_guided_trajectory(guide, [4.0, 3.0, 2.0], settings, GroundCollision())
+    assert points[1].position[2] == 0.0
+    assert points[2].position[2] == 0.0
+    assert points[1].attached is True
