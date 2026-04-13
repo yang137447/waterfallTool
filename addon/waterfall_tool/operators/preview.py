@@ -30,16 +30,21 @@ def _is_emitter_object(obj) -> bool:
     return getattr(obj, "type", None) == "EMPTY"
 
 
+def _is_flow_curve_object(obj) -> bool:
+    getter = getattr(obj, "get", None)
+    return getattr(obj, "type", None) == "CURVE" and callable(getter) and bool(getter("waterfall_flow_curve"))
+
+
+def _is_preview_mesh_object(obj) -> bool:
+    getter = getattr(obj, "get", None)
+    return getattr(obj, "type", None) == "MESH" and callable(getter) and bool(getter("waterfall_generated"))
+
+
 def resolve_emitter_curve_targets(selected_obj, data_objects):
     if selected_obj is None:
         return (None, None)
 
-    getter = getattr(selected_obj, "get", None)
-    is_flow_curve = (
-        getattr(selected_obj, "type", None) == "CURVE"
-        and callable(getter)
-        and bool(getter("waterfall_flow_curve"))
-    )
+    is_flow_curve = _is_flow_curve_object(selected_obj)
     if is_flow_curve:
         curve = selected_obj
         curve_props = getattr(curve, "waterfall_curve", None)
@@ -54,6 +59,8 @@ def resolve_emitter_curve_targets(selected_obj, data_objects):
     emitter = selected_obj
     emitter_props = getattr(emitter, "waterfall_emitter", None)
     curve = _lookup_object(data_objects, getattr(emitter_props, "flow_curve_name", ""))
+    if not _is_flow_curve_object(curve):
+        curve = None
     return (emitter, curve)
 
 
@@ -70,7 +77,7 @@ def _set_object_hidden(obj, hidden: bool) -> None:
 def set_preview_hidden(curve, data_objects, hidden: bool):
     props = getattr(curve, "waterfall_curve", None)
     preview = _lookup_object(data_objects, getattr(props, "preview_mesh_name", ""))
-    if preview is None:
+    if not _is_preview_mesh_object(preview):
         return None
     _set_object_hidden(preview, hidden)
     return preview

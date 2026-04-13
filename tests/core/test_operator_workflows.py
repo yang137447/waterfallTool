@@ -75,8 +75,28 @@ def test_resolve_emitter_curve_targets_rejects_non_empty_objects_as_emitters():
     assert selected == (None, None)
 
 
+def test_resolve_emitter_curve_targets_ignores_non_tool_curve_name_collisions():
+    emitter = FakeObject(
+        "Emitter",
+        "EMPTY",
+        waterfall_emitter=SimpleNamespace(flow_curve_name="FlowCurve"),
+        waterfall_curve=SimpleNamespace(),
+    )
+    unrelated = FakeObject(
+        "FlowCurve",
+        "CURVE",
+        props={"waterfall_flow_curve": False},
+        waterfall_emitter=SimpleNamespace(),
+        waterfall_curve=SimpleNamespace(),
+    )
+
+    selected = resolve_emitter_curve_targets(emitter, {"Emitter": emitter, "FlowCurve": unrelated})
+
+    assert selected == (emitter, None)
+
+
 def test_set_preview_hidden_toggles_existing_preview_object_visibility():
-    preview = FakeObject("FlowCurve_Preview", "MESH")
+    preview = FakeObject("FlowCurve_Preview", "MESH", props={"waterfall_generated": True})
     curve = FakeObject(
         "FlowCurve",
         "CURVE",
@@ -94,6 +114,23 @@ def test_set_preview_hidden_toggles_existing_preview_object_visibility():
     assert preview._hidden_calls == [True, False]
     assert preview.hide_viewport is False
     assert preview.hide_render is False
+
+
+def test_set_preview_hidden_ignores_non_generated_preview_name_collisions():
+    unrelated = FakeObject("FlowCurve_Preview", "MESH")
+    curve = FakeObject(
+        "FlowCurve",
+        "CURVE",
+        props={"waterfall_flow_curve": True},
+        waterfall_emitter=SimpleNamespace(),
+        waterfall_curve=SimpleNamespace(preview_mesh_name="FlowCurve_Preview"),
+    )
+    objects = {"FlowCurve_Preview": unrelated}
+
+    result = set_preview_hidden(curve, objects, hidden=True)
+
+    assert result is None
+    assert unrelated._hidden_calls == []
 
 
 def test_apply_persistent_handler_uses_blender_persistent_decorator_when_available():
@@ -120,7 +157,7 @@ def test_apply_persistent_handler_uses_blender_persistent_decorator_when_availab
 
 
 def test_refresh_curve_preview_returns_none_and_hides_existing_preview_for_empty_mesh(monkeypatch):
-    preview = FakeObject("FlowCurve_Preview", "MESH")
+    preview = FakeObject("FlowCurve_Preview", "MESH", props={"waterfall_generated": True})
     curve = FakeObject(
         "FlowCurve",
         "CURVE",
