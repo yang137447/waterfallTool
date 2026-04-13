@@ -10,6 +10,56 @@ from ..core.trajectory import simulate_guided_trajectory
 from ..core.types import EmitterSettings, MeshSettings, TrajectoryPoint
 
 
+def _lookup_object(data_objects, name: str):
+    if not name:
+        return None
+    getter = getattr(data_objects, "get", None)
+    if getter is None:
+        return None
+    return getter(name)
+
+
+def resolve_emitter_curve_targets(selected_obj, data_objects):
+    if selected_obj is None:
+        return (None, None)
+
+    getter = getattr(selected_obj, "get", None)
+    is_flow_curve = (
+        getattr(selected_obj, "type", None) == "CURVE"
+        and callable(getter)
+        and bool(getter("waterfall_flow_curve"))
+    )
+    if is_flow_curve:
+        curve = selected_obj
+        curve_props = getattr(curve, "waterfall_curve", None)
+        emitter = _lookup_object(data_objects, getattr(curve_props, "emitter_name", ""))
+        return (emitter, curve)
+
+    emitter = selected_obj
+    emitter_props = getattr(emitter, "waterfall_emitter", None)
+    curve = _lookup_object(data_objects, getattr(emitter_props, "flow_curve_name", ""))
+    return (emitter, curve)
+
+
+def _set_object_hidden(obj, hidden: bool) -> None:
+    hide_set = getattr(obj, "hide_set", None)
+    if callable(hide_set):
+        hide_set(hidden)
+    if hasattr(obj, "hide_viewport"):
+        obj.hide_viewport = hidden
+    if hasattr(obj, "hide_render"):
+        obj.hide_render = hidden
+
+
+def set_preview_hidden(curve, data_objects, hidden: bool):
+    props = getattr(curve, "waterfall_curve", None)
+    preview = _lookup_object(data_objects, getattr(props, "preview_mesh_name", ""))
+    if preview is None:
+        return None
+    _set_object_hidden(preview, hidden)
+    return preview
+
+
 def refresh_curve_preview(curve, context):
     from ..adapters.blender_curve import read_flow_curve_points
     from ..adapters.blender_mesh import create_or_update_mesh_object
@@ -17,6 +67,7 @@ def refresh_curve_preview(curve, context):
 
     props = curve.waterfall_curve
     if not props.preview_enabled:
+        set_preview_hidden(curve, bpy.data.objects, hidden=True)
         return None
 
     positions, speeds = read_flow_curve_points(curve)
@@ -54,6 +105,7 @@ def refresh_curve_preview(curve, context):
     mesh = build_x_card_mesh(points, mesh_settings)
     preview = create_or_update_mesh_object(context, preview_name, mesh, generated=True)
     props.preview_mesh_name = preview.name
+    _set_object_hidden(preview, False)
     return preview
 
 
@@ -73,10 +125,7 @@ if bpy is not None:
         bl_options = {"REGISTER", "UNDO"}
 
         def execute(self, context):
-            curve = context.object
-            if curve is None or curve.type != "CURVE":
-                emitter = context.object
-                curve = bpy.data.objects.get(emitter.waterfall_emitter.flow_curve_name) if emitter else None
+            _emitter, curve = resolve_emitter_curve_targets(context.object, bpy.data.objects)
             if curve is None or curve.type != "CURVE":
                 self.report({"ERROR"}, "Select a flow curve or emitter")
                 return {"CANCELLED"}

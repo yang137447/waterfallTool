@@ -5,7 +5,7 @@ try:
 except ModuleNotFoundError:
     bpy = None
 
-from ..operators.preview import refresh_curve_preview
+from ..operators.preview import refresh_curve_preview, resolve_emitter_curve_targets, set_preview_hidden
 
 
 if bpy is not None:
@@ -16,7 +16,7 @@ if bpy is not None:
         bl_options = {"REGISTER", "UNDO"}
 
         def execute(self, context):
-            curve = context.object
+            _emitter, curve = resolve_emitter_curve_targets(context.object, bpy.data.objects)
             if curve is None or curve.type != "CURVE":
                 self.report({"ERROR"}, "Select a flow curve before baking")
                 return {"CANCELLED"}
@@ -32,6 +32,7 @@ if bpy is not None:
             baked["waterfall_generated"] = True
             curve.waterfall_curve.baked_mesh_name = baked.name
             curve.waterfall_curve.preview_enabled = False
+            set_preview_hidden(curve, bpy.data.objects, hidden=True)
             return {"FINISHED"}
 
 else:

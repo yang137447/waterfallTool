@@ -16,26 +16,34 @@ if bpy is not None:
         bl_category = "Waterfall"
 
         def draw(self, context):
+            from .operators.preview import resolve_emitter_curve_targets
+
             layout = self.layout
             obj = context.object
             if obj is None:
                 layout.label(text="Select an emitter or flow curve")
                 return
 
-            emitter = obj.waterfall_emitter
-            curve = obj.waterfall_curve
+            emitter_obj, curve_obj = resolve_emitter_curve_targets(obj, bpy.data.objects)
+            emitter = getattr(emitter_obj, "waterfall_emitter", None)
+            curve = getattr(curve_obj, "waterfall_curve", None)
 
-            simulation = layout.box()
-            simulation.label(text="Simulation")
-            simulation.prop(emitter, "speed")
-            simulation.prop(emitter, "direction_axis")
-            simulation.prop(emitter, "gravity")
-            simulation.prop(emitter, "drag")
-            simulation.prop(emitter, "simulation_step_count")
-            simulation.prop(emitter, "simulation_time_step")
-            simulation.prop(emitter, "attach_strength")
-            simulation.prop(emitter, "detach_threshold")
-            simulation.operator("waterfall.simulate_curve")
+            if emitter is not None:
+                simulation = layout.box()
+                simulation.label(text="Simulation")
+                simulation.prop(emitter, "speed")
+                simulation.prop(emitter, "direction_axis")
+                simulation.prop(emitter, "gravity")
+                simulation.prop(emitter, "drag")
+                simulation.prop(emitter, "simulation_step_count")
+                simulation.prop(emitter, "simulation_time_step")
+                simulation.prop(emitter, "attach_strength")
+                simulation.prop(emitter, "detach_threshold")
+                simulation.operator("waterfall.simulate_curve")
+
+            if curve is None:
+                layout.label(text="Generate or select a linked flow curve")
+                return
 
             curve_box = layout.box()
             curve_box.label(text="Curve Mode")

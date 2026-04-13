@@ -9,6 +9,7 @@ except ModuleNotFoundError:
 
 from ..core.trajectory import simulate_trajectory
 from ..core.types import EmitterSettings
+from ..operators.preview import resolve_emitter_curve_targets
 
 
 def _direction_from_axis(obj, axis: str):
@@ -33,8 +34,8 @@ if bpy is not None:
             from ..adapters.blender_curve import create_or_update_flow_curve
             from ..adapters.blender_scene import BlenderVisibleMeshCollisionProvider
 
-            emitter = context.object
-            if emitter is None:
+            emitter, _curve = resolve_emitter_curve_targets(context.object, bpy.data.objects)
+            if emitter is None or getattr(emitter, "waterfall_emitter", None) is None:
                 self.report({"ERROR"}, "Select an emitter empty")
                 return {"CANCELLED"}
 
