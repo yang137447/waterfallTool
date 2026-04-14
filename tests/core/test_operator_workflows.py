@@ -10,6 +10,8 @@ from waterfall_tool.operators.preview import (
     apply_persistent_handler,
     refresh_curve_preview,
     resolve_emitter_curve_targets,
+    resolve_preview_parent,
+    should_refresh_curve_from_update,
     set_preview_hidden,
 )
 
@@ -134,6 +136,21 @@ def test_set_preview_hidden_ignores_non_generated_preview_name_collisions():
     assert unrelated._hidden_calls == []
 
 
+def test_resolve_preview_parent_prefers_linked_emitter():
+    emitter = FakeObject("Emitter", "EMPTY", waterfall_emitter=SimpleNamespace(), waterfall_curve=SimpleNamespace())
+    curve = FakeObject(
+        "FlowCurve",
+        "CURVE",
+        props={"waterfall_flow_curve": True},
+        waterfall_emitter=SimpleNamespace(),
+        waterfall_curve=SimpleNamespace(emitter_name="Emitter"),
+    )
+
+    parent = resolve_preview_parent(curve, {"Emitter": emitter})
+
+    assert parent is emitter
+
+
 def test_apply_persistent_handler_uses_blender_persistent_decorator_when_available():
     seen = []
 
@@ -242,6 +259,26 @@ def test_refresh_curve_preview_can_build_for_bake_while_preview_visibility_stays
 
     assert result is rebuilt_preview
     assert rebuilt_preview._hidden_calls == [True]
+
+
+def test_should_refresh_curve_from_update_requires_geometry_change_on_tool_curve():
+    update = SimpleNamespace(
+        id=FakeObject("FlowCurve", "CURVE", props={"waterfall_flow_curve": True}),
+        is_updated_geometry=True,
+        is_updated_transform=False,
+    )
+
+    assert should_refresh_curve_from_update(update) is True
+
+
+def test_should_refresh_curve_from_update_ignores_transform_only_updates():
+    update = SimpleNamespace(
+        id=FakeObject("FlowCurve", "CURVE", props={"waterfall_flow_curve": True}),
+        is_updated_geometry=False,
+        is_updated_transform=True,
+    )
+
+    assert should_refresh_curve_from_update(update) is False
 
 
 def test_bake_preview_mesh_copies_preview_world_transform_to_baked_object():

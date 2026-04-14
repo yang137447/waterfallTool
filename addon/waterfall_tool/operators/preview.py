@@ -40,6 +40,14 @@ def _is_preview_mesh_object(obj) -> bool:
     return getattr(obj, "type", None) == "MESH" and callable(getter) and bool(getter("waterfall_generated"))
 
 
+def resolve_preview_parent(curve, data_objects):
+    curve_props = getattr(curve, "waterfall_curve", None)
+    emitter = _lookup_object(data_objects, getattr(curve_props, "emitter_name", ""))
+    if _is_emitter_object(emitter):
+        return emitter
+    return curve
+
+
 def resolve_emitter_curve_targets(selected_obj, data_objects):
     if selected_obj is None:
         return (None, None)
@@ -93,6 +101,11 @@ def _scene_objects():
     return getattr(getattr(bpy, "data", None), "objects", None)
 
 
+def should_refresh_curve_from_update(update) -> bool:
+    obj = getattr(update, "id", None)
+    return _is_flow_curve_object(obj) and bool(getattr(update, "is_updated_geometry", False))
+
+
 def _should_build_preview_mesh(preview_enabled: bool, allow_when_preview_disabled: bool) -> bool:
     return preview_enabled or allow_when_preview_disabled
 
@@ -143,7 +156,8 @@ def refresh_curve_preview(curve, context, *, allow_when_preview_disabled: bool =
     if is_preview_mesh_empty(mesh):
         set_preview_hidden(curve, _scene_objects(), hidden=True)
         return None
-    preview = create_or_update_mesh_object(context, preview_name, mesh, generated=True, parent=curve)
+    preview_parent = resolve_preview_parent(curve, _scene_objects())
+    preview = create_or_update_mesh_object(context, preview_name, mesh, generated=True, parent=preview_parent)
     props.preview_mesh_name = preview.name
     visible = props.preview_enabled if force_visible is None else bool(force_visible)
     _set_object_hidden(preview, not visible)
@@ -155,8 +169,8 @@ if bpy is not None:
     def depsgraph_refresh(scene, depsgraph):
         context = bpy.context
         for update in depsgraph.updates:
-            obj = getattr(update, "id", None)
-            if getattr(obj, "type", None) == "CURVE" and obj.get("waterfall_flow_curve"):
+            if should_refresh_curve_from_update(update):
+                obj = update.id
                 refresh_curve_preview(obj, context)
     depsgraph_refresh = apply_persistent_handler(depsgraph_refresh, bpy)
 

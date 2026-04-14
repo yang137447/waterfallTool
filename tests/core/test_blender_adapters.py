@@ -266,6 +266,7 @@ def test_create_or_update_flow_curve_parents_curve_to_emitter_for_follow_motion(
 
     assert result.parent is emitter
     assert result.matrix_parent_inverse is not None
+    assert result.matrix_world is emitter.matrix_world
 
 
 def test_create_or_update_mesh_object_writes_local_vertices_on_existing_object(monkeypatch):
@@ -302,6 +303,7 @@ def test_create_or_update_mesh_object_parents_preview_to_curve_for_follow_motion
 
     assert result.parent is curve
     assert result.matrix_parent_inverse is not None
+    assert result.matrix_world is curve.matrix_world
 
 
 def test_create_or_update_mesh_object_repeated_updates_do_not_duplicate_uv_layers(monkeypatch):

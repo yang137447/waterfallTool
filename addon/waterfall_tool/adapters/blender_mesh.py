@@ -8,6 +8,7 @@ def _set_follow_parent(obj, parent) -> None:
         return
     obj.parent = parent
     obj.matrix_parent_inverse = parent.matrix_world.inverted()
+    obj.matrix_world = parent.matrix_world
 
 
 def create_or_update_mesh_object(context, name: str, mesh_data: MeshData, *, generated: bool = True, parent=None):
