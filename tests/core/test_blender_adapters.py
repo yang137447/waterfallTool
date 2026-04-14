@@ -360,6 +360,46 @@ def test_collision_sample_transforms_normal_with_inverse_transpose(monkeypatch):
     assert sample.normal == (0.4472135954999579, 0.8944271909999159, 0.0)
 
 
+def test_collision_sample_passes_local_space_distance_to_ray_cast(monkeypatch):
+    fake_mathutils = types.SimpleNamespace(Vector=FakeVector)
+    monkeypatch.setitem(sys.modules, "mathutils", fake_mathutils)
+
+    matrix_world = FakeMatrixWorld(sz=2.0)
+    captured = {}
+
+    class FakeEvaluatedObject:
+        def __init__(self):
+            self.matrix_world = matrix_world
+
+        def ray_cast(self, _start, _direction, distance):
+            captured["distance"] = distance
+            return False, None, None, -1
+
+    class FakeCollisionObject:
+        name = "Collision"
+        type = "MESH"
+
+        def visible_get(self):
+            return True
+
+        def get(self, _key, default=None):
+            return default
+
+        def evaluated_get(self, _depsgraph):
+            return FakeEvaluatedObject()
+
+    class FakeContext:
+        scene = types.SimpleNamespace(objects=[FakeCollisionObject()])
+
+        def evaluated_depsgraph_get(self):
+            return object()
+
+    provider = BlenderVisibleMeshCollisionProvider(FakeContext())
+    provider.sample((0.0, 0.0, 0.0), (0.0, 0.0, -4.0))
+
+    assert captured["distance"] == 2.0
+
+
 def test_create_or_update_flow_curve_accepts_empty_points(monkeypatch):
     curve_obj = FakeObject("Flow", FakeCurveData(), FakeMatrixWorld())
     curve_obj["waterfall_flow_curve"] = True

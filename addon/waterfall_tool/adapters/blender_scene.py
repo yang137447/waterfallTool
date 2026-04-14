@@ -23,7 +23,9 @@ class BlenderVisibleMeshCollisionProvider(CollisionProvider):
     def sample(self, start, end):
         import mathutils
 
-        direction = mathutils.Vector(end) - mathutils.Vector(start)
+        start_vector = mathutils.Vector(start)
+        end_vector = mathutils.Vector(end)
+        direction = end_vector - start_vector
         distance = direction.length
         if distance <= 1.0e-8:
             return CollisionSample(hit=False)
@@ -33,14 +35,18 @@ class BlenderVisibleMeshCollisionProvider(CollisionProvider):
 
         for obj in self._collision_objects():
             evaluated = obj.evaluated_get(depsgraph)
-            local_start = evaluated.matrix_world.inverted() @ mathutils.Vector(start)
+            local_start = evaluated.matrix_world.inverted() @ start_vector
+            local_end = evaluated.matrix_world.inverted() @ end_vector
             local_direction = evaluated.matrix_world.to_3x3().inverted() @ direction
-            hit, location, normal, _face_index = evaluated.ray_cast(local_start, local_direction, distance=distance)
+            local_distance = (local_end - local_start).length
+            hit, location, normal, _face_index = evaluated.ray_cast(
+                local_start, local_direction, distance=local_distance
+            )
             if not hit:
                 continue
             world_location = evaluated.matrix_world @ location
             world_normal = (evaluated.matrix_world.to_3x3().inverted().transposed() @ normal).normalized()
-            hit_distance = (world_location - mathutils.Vector(start)).length
+            hit_distance = (world_location - start_vector).length
             if best_hit is None or hit_distance < best_hit[0]:
                 best_hit = (hit_distance, world_location, world_normal)
 
