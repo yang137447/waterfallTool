@@ -165,6 +165,16 @@ class FakeMesh:
         return None
 
 
+class FakeCurveMeshVertex:
+    def __init__(self, co):
+        self.co = FakeVector(co)
+
+
+class FakeCurveMesh:
+    def __init__(self, vertices):
+        self.vertices = [FakeCurveMeshVertex(vertex) for vertex in vertices]
+
+
 class FakeObject:
     def __init__(self, name, data, matrix_world, object_type=None):
         self.name = name
@@ -455,6 +465,44 @@ def test_create_or_update_flow_curve_accepts_empty_points(monkeypatch):
     assert result is curve_obj
     assert curve_obj.get("waterfall_flow_curve") is True
     assert curve_obj.get("waterfall_speed_cache") == []
+
+
+def test_read_flow_curve_points_prefers_evaluated_curve_vertices_when_available(monkeypatch):
+    class FakeEvaluatedCurve:
+        def __init__(self):
+            self._mesh = FakeCurveMesh(
+                [
+                    (0.0, 0.0, 0.0),
+                    (0.25, 0.5, -0.25),
+                    (0.5, 1.0, -0.5),
+                    (0.75, 1.5, -0.75),
+                    (1.0, 2.0, -1.0),
+                ]
+            )
+
+        def to_mesh(self):
+            return self._mesh
+
+        def to_mesh_clear(self):
+            return None
+
+    curve_obj = types.SimpleNamespace(
+        data=types.SimpleNamespace(splines=[types.SimpleNamespace(points=[object(), object()])]),
+        matrix_world=FakeMatrixWorld(),
+        get=lambda key, default=None: [1.0, 3.0] if key == "waterfall_speed_cache" else default,
+        evaluated_get=lambda _depsgraph: FakeEvaluatedCurve(),
+    )
+    fake_bpy = types.SimpleNamespace(context=types.SimpleNamespace(evaluated_depsgraph_get=lambda: object()))
+    monkeypatch.setitem(sys.modules, "bpy", fake_bpy)
+
+    positions, speeds = read_flow_curve_points(curve_obj)
+
+    assert len(positions) == 5
+    assert positions[0] == (0.0, 0.0, 0.0)
+    assert positions[-1] == (1.0, 2.0, -1.0)
+    assert speeds[0] == 1.0
+    assert speeds[-1] == 3.0
+    assert speeds[2] == 2.0
 
 
 def test_read_flow_curve_points_returns_empty_for_unsupported_spline_shape():

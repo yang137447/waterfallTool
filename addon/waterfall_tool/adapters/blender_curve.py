@@ -55,15 +55,57 @@ def _can_reuse_flow_curve_object(curve_obj) -> bool:
 def read_flow_curve_points(curve_obj) -> tuple[list[tuple[float, float, float]], list[float]]:
     if not curve_obj.data.splines:
         return ([], [])
-    spline = curve_obj.data.splines[0]
-    spline_points = getattr(spline, "points", None)
-    if spline_points is None:
-        return ([], [])
-    speed_cache = list(curve_obj.get("waterfall_speed_cache", []))
-    positions = []
-    speeds = []
-    for index, spline_point in enumerate(spline_points):
-        world = curve_obj.matrix_world @ spline_point.co.to_3d()
-        positions.append(tuple(world))
-        speeds.append(float(speed_cache[index]) if index < len(speed_cache) else 1.0)
+
+    positions = _read_evaluated_curve_positions(curve_obj)
+    if not positions:
+        spline = curve_obj.data.splines[0]
+        spline_points = getattr(spline, "points", None)
+        if spline_points is None:
+            return ([], [])
+        for spline_point in spline_points:
+            world = curve_obj.matrix_world @ spline_point.co.to_3d()
+            positions.append(tuple(world))
+
+    speeds = _interpolate_speed_cache(curve_obj.get("waterfall_speed_cache", []), len(positions))
     return (positions, speeds)
+
+
+def _read_evaluated_curve_positions(curve_obj) -> list[tuple[float, float, float]]:
+    try:
+        import bpy
+    except ModuleNotFoundError:
+        return []
+
+    if not hasattr(curve_obj, "evaluated_get"):
+        return []
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    evaluated = curve_obj.evaluated_get(depsgraph)
+    mesh = evaluated.to_mesh()
+    try:
+        return [tuple(curve_obj.matrix_world @ vertex.co) for vertex in mesh.vertices]
+    finally:
+        evaluated.to_mesh_clear()
+
+
+def _interpolate_speed_cache(speed_cache, count: int) -> list[float]:
+    if count <= 0:
+        return []
+    if not speed_cache:
+        return [1.0] * count
+    speeds = [float(speed) for speed in speed_cache]
+    if len(speeds) == 1:
+        return [speeds[0]] * count
+    if len(speeds) == count:
+        return speeds
+
+    last_index = len(speeds) - 1
+    result: list[float] = []
+    for index in range(count):
+        t = 0.0 if count == 1 else index / (count - 1)
+        sample_index = t * last_index
+        low = int(sample_index)
+        high = min(last_index, low + 1)
+        local_t = sample_index - low
+        value = speeds[low] + (speeds[high] - speeds[low]) * local_t
+        result.append(value)
+    return result
