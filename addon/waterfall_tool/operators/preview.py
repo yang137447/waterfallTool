@@ -143,7 +143,7 @@ def refresh_curve_preview(curve, context, *, allow_when_preview_disabled: bool =
     if is_preview_mesh_empty(mesh):
         set_preview_hidden(curve, _scene_objects(), hidden=True)
         return None
-    preview = create_or_update_mesh_object(context, preview_name, mesh, generated=True)
+    preview = create_or_update_mesh_object(context, preview_name, mesh, generated=True, parent=curve)
     props.preview_mesh_name = preview.name
     visible = props.preview_enabled if force_visible is None else bool(force_visible)
     _set_object_hidden(preview, not visible)

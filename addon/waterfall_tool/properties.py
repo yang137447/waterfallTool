@@ -5,23 +5,26 @@ try:
 except ModuleNotFoundError:
     bpy = None
 
-
-def _safe_operator_call(operator_id: str) -> None:
-    if bpy is None:
-        return
-    try:
-        namespace, name = operator_id.split(".")
-        getattr(getattr(bpy.ops, namespace), name)()
-    except RuntimeError:
-        return
-
-
 def _refresh_from_emitter(_self, _context) -> None:
-    _safe_operator_call("waterfall.simulate_curve")
+    if bpy is None or _context is None:
+        return
+    owner = getattr(_self, "id_data", None)
+    if owner is None:
+        return
+    from .operators.simulate import generate_or_resimulate_curve
+
+    generate_or_resimulate_curve(owner, _context)
 
 
 def _refresh_from_curve(_self, _context) -> None:
-    _safe_operator_call("waterfall.rebuild_preview")
+    if bpy is None or _context is None:
+        return
+    owner = getattr(_self, "id_data", None)
+    if owner is None:
+        return
+    from .operators.preview import refresh_curve_preview
+
+    refresh_curve_preview(owner, _context)
 
 
 if bpy is not None:

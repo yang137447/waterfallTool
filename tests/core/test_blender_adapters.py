@@ -170,6 +170,8 @@ class FakeObject:
         self.name = name
         self.data = data
         self.matrix_world = matrix_world
+        self.parent = None
+        self.matrix_parent_inverse = None
         if object_type is None:
             if isinstance(data, FakeMesh):
                 object_type = "MESH"
@@ -249,6 +251,23 @@ def test_create_or_update_flow_curve_writes_local_positions_on_existing_object(m
     assert spline.points[0].co == (2.0, 0.0, 0.0, 1.0)
 
 
+def test_create_or_update_flow_curve_parents_curve_to_emitter_for_follow_motion(monkeypatch):
+    emitter = FakeObject("Emitter", None, FakeMatrixWorld(), object_type="EMPTY")
+    objects = FakeBpyObjects({})
+    fake_bpy = types.SimpleNamespace(
+        data=types.SimpleNamespace(objects=objects, curves=FakeBpyCurves()),
+    )
+    monkeypatch.setitem(sys.modules, "bpy", fake_bpy)
+    monkeypatch.setitem(sys.modules, "mathutils", types.SimpleNamespace(Vector=FakeVector))
+
+    points = [TrajectoryPoint(position=(1.0, 0.0, 0.0), velocity=(0.0, 0.0, 0.0), speed=1.0)]
+    context = FakeContext()
+    result = create_or_update_flow_curve(context=context, name="Flow", points=points, parent=emitter)
+
+    assert result.parent is emitter
+    assert result.matrix_parent_inverse is not None
+
+
 def test_create_or_update_mesh_object_writes_local_vertices_on_existing_object(monkeypatch):
     mesh = FakeMesh()
     obj = FakeObject("Waterfall", mesh, FakeMatrixWorld(sx=2.0, sy=1.0, sz=1.0))
@@ -261,6 +280,28 @@ def test_create_or_update_mesh_object_writes_local_vertices_on_existing_object(m
     create_or_update_mesh_object(context=None, name="Waterfall", mesh_data=mesh_data)
 
     assert mesh.vertices_written == [(2.0, 0.0, 0.0)]
+
+
+def test_create_or_update_mesh_object_parents_preview_to_curve_for_follow_motion(monkeypatch):
+    curve = FakeObject("FlowCurve", FakeCurveData(), FakeMatrixWorld(), object_type="CURVE")
+    objects = FakeBpyObjects({})
+    fake_bpy = types.SimpleNamespace(
+        data=types.SimpleNamespace(objects=objects, meshes=FakeBpyMeshes()),
+    )
+    monkeypatch.setitem(sys.modules, "bpy", fake_bpy)
+    monkeypatch.setitem(sys.modules, "mathutils", types.SimpleNamespace(Vector=FakeVector))
+
+    mesh_data = MeshData(vertices=[(1.0, 0.0, 0.0)], faces=[])
+    context = FakeContext()
+    result = create_or_update_mesh_object(
+        context=context,
+        name="FlowCurve_Preview",
+        mesh_data=mesh_data,
+        parent=curve,
+    )
+
+    assert result.parent is curve
+    assert result.matrix_parent_inverse is not None
 
 
 def test_create_or_update_mesh_object_repeated_updates_do_not_duplicate_uv_layers(monkeypatch):

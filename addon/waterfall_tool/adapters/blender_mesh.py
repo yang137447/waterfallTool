@@ -3,7 +3,14 @@ from __future__ import annotations
 from ..core.types import MeshData
 
 
-def create_or_update_mesh_object(context, name: str, mesh_data: MeshData, *, generated: bool = True):
+def _set_follow_parent(obj, parent) -> None:
+    if parent is None:
+        return
+    obj.parent = parent
+    obj.matrix_parent_inverse = parent.matrix_world.inverted()
+
+
+def create_or_update_mesh_object(context, name: str, mesh_data: MeshData, *, generated: bool = True, parent=None):
     import bpy
     import mathutils
 
@@ -15,6 +22,8 @@ def create_or_update_mesh_object(context, name: str, mesh_data: MeshData, *, gen
         blender_mesh = bpy.data.meshes.new(name)
         obj = bpy.data.objects.new(name, blender_mesh)
         context.collection.objects.link(obj)
+
+    _set_follow_parent(obj, parent)
 
     world_to_local = obj.matrix_world.inverted()
     local_vertices = [tuple(world_to_local @ mathutils.Vector(vertex)) for vertex in mesh_data.vertices]

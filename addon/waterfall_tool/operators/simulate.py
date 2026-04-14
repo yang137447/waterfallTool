@@ -23,6 +23,39 @@ def _direction_from_axis(obj, axis: str):
     return tuple(world.normalized())
 
 
+def generate_or_resimulate_curve(emitter, context):
+    from ..adapters.blender_curve import create_or_update_flow_curve
+    from ..adapters.blender_scene import BlenderVisibleMeshCollisionProvider
+    from ..operators.preview import refresh_curve_preview
+
+    if emitter is None or getattr(emitter, "waterfall_emitter", None) is None:
+        return None
+
+    props = emitter.waterfall_emitter
+    settings = EmitterSettings(
+        speed=props.speed,
+        gravity=props.gravity,
+        drag=props.drag,
+        time_step=props.simulation_time_step,
+        step_count=props.simulation_step_count,
+        attach_strength=props.attach_strength,
+        detach_threshold=props.detach_threshold,
+    )
+    curve_name = props.flow_curve_name or f"{emitter.name}_FlowCurve"
+    collision_provider = BlenderVisibleMeshCollisionProvider(context, excluded_names={curve_name})
+    points = simulate_trajectory(
+        tuple(emitter.matrix_world.translation),
+        _direction_from_axis(emitter, props.direction_axis),
+        settings,
+        collision_provider,
+    )
+    curve = create_or_update_flow_curve(context, curve_name, points, parent=emitter)
+    props.flow_curve_name = curve.name
+    curve.waterfall_curve.emitter_name = emitter.name
+    refresh_curve_preview(curve, context)
+    return curve
+
+
 if bpy is not None:
 
     class WATERFALL_OT_simulate_curve(bpy.types.Operator):
@@ -31,36 +64,12 @@ if bpy is not None:
         bl_options = {"REGISTER", "UNDO"}
 
         def execute(self, context):
-            from ..adapters.blender_curve import create_or_update_flow_curve
-            from ..adapters.blender_scene import BlenderVisibleMeshCollisionProvider
-
             emitter, _curve = resolve_emitter_curve_targets(context.object, bpy.data.objects)
             if emitter is None or getattr(emitter, "waterfall_emitter", None) is None:
                 self.report({"ERROR"}, "Select an emitter empty")
                 return {"CANCELLED"}
 
-            props = emitter.waterfall_emitter
-            settings = EmitterSettings(
-                speed=props.speed,
-                gravity=props.gravity,
-                drag=props.drag,
-                time_step=props.simulation_time_step,
-                step_count=props.simulation_step_count,
-                attach_strength=props.attach_strength,
-                detach_threshold=props.detach_threshold,
-            )
-            curve_name = props.flow_curve_name or f"{emitter.name}_FlowCurve"
-            collision_provider = BlenderVisibleMeshCollisionProvider(context, excluded_names={curve_name})
-            points = simulate_trajectory(
-                tuple(emitter.matrix_world.translation),
-                _direction_from_axis(emitter, props.direction_axis),
-                settings,
-                collision_provider,
-            )
-            curve = create_or_update_flow_curve(context, curve_name, points)
-            props.flow_curve_name = curve.name
-            curve.waterfall_curve.emitter_name = emitter.name
-            bpy.ops.waterfall.rebuild_preview()
+            generate_or_resimulate_curve(emitter, context)
             return {"FINISHED"}
 
 else:

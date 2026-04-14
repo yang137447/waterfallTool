@@ -3,7 +3,14 @@ from __future__ import annotations
 from ..core.types import TrajectoryPoint
 
 
-def create_or_update_flow_curve(context, name: str, points: list[TrajectoryPoint]):
+def _set_follow_parent(obj, parent) -> None:
+    if parent is None:
+        return
+    obj.parent = parent
+    obj.matrix_parent_inverse = parent.matrix_world.inverted()
+
+
+def create_or_update_flow_curve(context, name: str, points: list[TrajectoryPoint], *, parent=None):
     import bpy
     import mathutils
 
@@ -16,6 +23,8 @@ def create_or_update_flow_curve(context, name: str, points: list[TrajectoryPoint
         curve_data.dimensions = "3D"
         curve_obj = bpy.data.objects.new(name, curve_data)
         context.collection.objects.link(curve_obj)
+
+    _set_follow_parent(curve_obj, parent)
 
     if points:
         spline = curve_data.splines.new("POLY")
