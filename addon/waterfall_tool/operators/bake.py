@@ -8,6 +8,18 @@ except ModuleNotFoundError:
 from ..operators.preview import refresh_curve_preview, resolve_emitter_curve_targets, set_preview_hidden
 
 
+def bake_preview_mesh_for_curve(curve, preview, context, bpy_module, *, set_preview_hidden_fn):
+    mesh_copy = preview.data.copy()
+    baked = bpy_module.data.objects.new(f"{curve.name}_Baked", mesh_copy)
+    context.collection.objects.link(baked)
+    baked.matrix_world = preview.matrix_world
+    baked["waterfall_generated"] = True
+    curve.waterfall_curve.baked_mesh_name = baked.name
+    curve.waterfall_curve.preview_enabled = False
+    set_preview_hidden_fn(curve, bpy_module.data.objects, hidden=True)
+    return baked
+
+
 if bpy is not None:
 
     class WATERFALL_OT_bake_mesh(bpy.types.Operator):
@@ -31,13 +43,13 @@ if bpy is not None:
                 self.report({"ERROR"}, "Preview is disabled or empty")
                 return {"CANCELLED"}
 
-            mesh_copy = preview.data.copy()
-            baked = bpy.data.objects.new(f"{curve.name}_Baked", mesh_copy)
-            context.collection.objects.link(baked)
-            baked["waterfall_generated"] = True
-            curve.waterfall_curve.baked_mesh_name = baked.name
-            curve.waterfall_curve.preview_enabled = False
-            set_preview_hidden(curve, bpy.data.objects, hidden=True)
+            bake_preview_mesh_for_curve(
+                curve,
+                preview,
+                context,
+                bpy,
+                set_preview_hidden_fn=set_preview_hidden,
+            )
             return {"FINISHED"}
 
 else:

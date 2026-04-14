@@ -4,6 +4,7 @@ import types
 from types import SimpleNamespace
 
 from waterfall_tool.core.types import MeshData
+from waterfall_tool.operators import bake as bake_ops
 from waterfall_tool.operators import preview as preview_ops
 from waterfall_tool.operators.preview import (
     apply_persistent_handler,
@@ -241,3 +242,53 @@ def test_refresh_curve_preview_can_build_for_bake_while_preview_visibility_stays
 
     assert result is rebuilt_preview
     assert rebuilt_preview._hidden_calls == [True]
+
+
+def test_bake_preview_mesh_copies_preview_world_transform_to_baked_object():
+    class FakeMeshData:
+        def copy(self):
+            return FakeMeshData()
+
+    class FakeBakedObject(FakeObject):
+        def __init__(self, name: str, mesh_data):
+            super().__init__(name, "MESH")
+            self.data = mesh_data
+            self.matrix_world = "IDENTITY"
+
+        def __setitem__(self, key, value):
+            self._props[key] = value
+
+    class FakeDataObjects(dict):
+        def new(self, name, mesh_data):
+            baked = FakeBakedObject(name, mesh_data)
+            self[baked.name] = baked
+            return baked
+
+    preview = FakeObject("FlowCurve_Preview", "MESH", props={"waterfall_generated": True})
+    preview.data = FakeMeshData()
+    preview.matrix_world = "WORLD_XFORM"
+    curve = FakeObject(
+        "FlowCurve",
+        "CURVE",
+        props={"waterfall_flow_curve": True},
+        waterfall_emitter=SimpleNamespace(),
+        waterfall_curve=SimpleNamespace(
+            baked_mesh_name="",
+            preview_enabled=True,
+        ),
+    )
+    data_objects = FakeDataObjects()
+    linked = []
+    fake_bpy = SimpleNamespace(data=SimpleNamespace(objects=data_objects))
+    context = SimpleNamespace(collection=SimpleNamespace(objects=SimpleNamespace(link=lambda obj: linked.append(obj))))
+
+    baked = bake_ops.bake_preview_mesh_for_curve(
+        curve,
+        preview,
+        context,
+        fake_bpy,
+        set_preview_hidden_fn=lambda *_args, **_kwargs: None,
+    )
+
+    assert baked is not None
+    assert baked.matrix_world == "WORLD_XFORM"

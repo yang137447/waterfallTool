@@ -46,10 +46,13 @@ def read_flow_curve_points(curve_obj) -> tuple[list[tuple[float, float, float]],
     if not curve_obj.data.splines:
         return ([], [])
     spline = curve_obj.data.splines[0]
+    spline_points = getattr(spline, "points", None)
+    if spline_points is None:
+        return ([], [])
     speed_cache = list(curve_obj.get("waterfall_speed_cache", []))
     positions = []
     speeds = []
-    for index, spline_point in enumerate(spline.points):
+    for index, spline_point in enumerate(spline_points):
         world = curve_obj.matrix_world @ spline_point.co.to_3d()
         positions.append(tuple(world))
         speeds.append(float(speed_cache[index]) if index < len(speed_cache) else 1.0)

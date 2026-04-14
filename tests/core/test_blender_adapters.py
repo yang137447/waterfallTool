@@ -2,7 +2,7 @@ import math
 import sys
 import types
 
-from waterfall_tool.adapters.blender_curve import create_or_update_flow_curve
+from waterfall_tool.adapters.blender_curve import create_or_update_flow_curve, read_flow_curve_points
 from waterfall_tool.adapters.blender_mesh import create_or_update_mesh_object
 from waterfall_tool.adapters.blender_scene import BlenderVisibleMeshCollisionProvider
 from waterfall_tool.core.types import MeshData, TrajectoryPoint
@@ -372,3 +372,16 @@ def test_create_or_update_flow_curve_accepts_empty_points(monkeypatch):
     assert result is curve_obj
     assert curve_obj.get("waterfall_flow_curve") is True
     assert curve_obj.get("waterfall_speed_cache") == []
+
+
+def test_read_flow_curve_points_returns_empty_for_unsupported_spline_shape():
+    curve_obj = types.SimpleNamespace(
+        data=types.SimpleNamespace(splines=[types.SimpleNamespace(bezier_points=[object()])]),
+        matrix_world=FakeMatrixWorld(),
+        get=lambda _key, default=None: default,
+    )
+
+    positions, speeds = read_flow_curve_points(curve_obj)
+
+    assert positions == []
+    assert speeds == []
