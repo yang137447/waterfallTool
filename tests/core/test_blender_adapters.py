@@ -505,9 +505,121 @@ def test_read_flow_curve_points_prefers_evaluated_curve_vertices_when_available(
     assert speeds[2] == 2.0
 
 
+def test_read_flow_curve_points_uses_evaluated_object_world_transform(monkeypatch):
+    class FakeEvaluatedCurve:
+        def __init__(self):
+            self.matrix_world = FakeMatrixWorld(sx=2.0, sy=3.0, sz=4.0)
+            self._mesh = FakeCurveMesh([(1.0, 1.0, 1.0)])
+
+        def to_mesh(self):
+            return self._mesh
+
+        def to_mesh_clear(self):
+            return None
+
+    curve_obj = types.SimpleNamespace(
+        data=types.SimpleNamespace(splines=[types.SimpleNamespace(points=[object()])]),
+        matrix_world=FakeMatrixWorld(sx=10.0, sy=10.0, sz=10.0),
+        get=lambda key, default=None: [2.0] if key == "waterfall_speed_cache" else default,
+        evaluated_get=lambda _depsgraph: FakeEvaluatedCurve(),
+    )
+    fake_bpy = types.SimpleNamespace(context=types.SimpleNamespace(evaluated_depsgraph_get=lambda: object()))
+    monkeypatch.setitem(sys.modules, "bpy", fake_bpy)
+
+    positions, speeds = read_flow_curve_points(curve_obj)
+
+    assert positions == [(2.0, 3.0, 4.0)]
+    assert speeds == [2.0]
+
+
+def test_read_flow_curve_points_samples_bezier_splines_without_evaluated_mesh():
+    class FakeBezierPoint:
+        def __init__(self, co, handle_left, handle_right):
+            self.co = FakeVector(co)
+            self.handle_left = FakeVector(handle_left)
+            self.handle_right = FakeVector(handle_right)
+
+    curve_obj = types.SimpleNamespace(
+        data=types.SimpleNamespace(
+            splines=[
+                types.SimpleNamespace(
+                    bezier_points=[
+                        FakeBezierPoint((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.5, 0.0)),
+                        FakeBezierPoint((1.0, 1.0, 0.0), (1.0, 0.5, 0.0), (1.0, 1.0, 0.0)),
+                    ],
+                    resolution_u=4,
+                    use_cyclic_u=False,
+                )
+            ]
+        ),
+        matrix_world=FakeMatrixWorld(),
+        get=lambda key, default=None: [1.0, 3.0] if key == "waterfall_speed_cache" else default,
+    )
+
+    positions, speeds = read_flow_curve_points(curve_obj)
+
+    assert len(positions) == 5
+    assert positions[0] == (0.0, 0.0, 0.0)
+    assert positions[-1] == (1.0, 1.0, 0.0)
+    assert speeds[0] == 1.0
+    assert speeds[-1] == 3.0
+    assert speeds[2] == 2.0
+
+
+def test_read_flow_curve_points_prefers_bezier_sampling_when_evaluated_mesh_only_has_control_points(monkeypatch):
+    class FakeBezierPoint:
+        def __init__(self, co, handle_left, handle_right):
+            self.co = FakeVector(co)
+            self.handle_left = FakeVector(handle_left)
+            self.handle_right = FakeVector(handle_right)
+
+    class FakeEvaluatedCurve:
+        def __init__(self):
+            self.matrix_world = FakeMatrixWorld()
+            self._mesh = FakeCurveMesh(
+                [
+                    (0.0, 0.0, 0.0),
+                    (1.0, 1.0, 0.0),
+                ]
+            )
+
+        def to_mesh(self):
+            return self._mesh
+
+        def to_mesh_clear(self):
+            return None
+
+    curve_obj = types.SimpleNamespace(
+        data=types.SimpleNamespace(
+            splines=[
+                types.SimpleNamespace(
+                    bezier_points=[
+                        FakeBezierPoint((0.0, 0.0, 0.0), (0.0, 0.0, 0.0), (0.0, 0.5, 0.0)),
+                        FakeBezierPoint((1.0, 1.0, 0.0), (1.0, 0.5, 0.0), (1.0, 1.0, 0.0)),
+                    ],
+                    resolution_u=4,
+                    use_cyclic_u=False,
+                )
+            ]
+        ),
+        matrix_world=FakeMatrixWorld(),
+        get=lambda key, default=None: [1.0, 3.0] if key == "waterfall_speed_cache" else default,
+        evaluated_get=lambda _depsgraph: FakeEvaluatedCurve(),
+    )
+    fake_bpy = types.SimpleNamespace(context=types.SimpleNamespace(evaluated_depsgraph_get=lambda: object()))
+    monkeypatch.setitem(sys.modules, "bpy", fake_bpy)
+
+    positions, speeds = read_flow_curve_points(curve_obj)
+
+    assert len(positions) == 5
+    assert positions[0] == (0.0, 0.0, 0.0)
+    assert positions[-1] == (1.0, 1.0, 0.0)
+    assert speeds[2] == 2.0
+
+
 def test_read_flow_curve_points_returns_empty_for_unsupported_spline_shape():
     curve_obj = types.SimpleNamespace(
-        data=types.SimpleNamespace(splines=[types.SimpleNamespace(bezier_points=[object()])]),
+        data=types.SimpleNamespace(splines=[types.SimpleNamespace(nurbs_points=[object()])]),
         matrix_world=FakeMatrixWorld(),
         get=lambda _key, default=None: default,
     )

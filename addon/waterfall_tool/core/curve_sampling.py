@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from math import acos, ceil
+from math import acos, ceil, pi
 
 from .types import CurveSample, MeshSettings, TrajectoryPoint
 from .vector_math import EPSILON, dot, length, lerp, normalize, sub
@@ -21,10 +21,18 @@ def _segment_curvature(points: list[TrajectoryPoint], index: int) -> float:
     return acos(min(1.0, max(-1.0, dot(incoming, outgoing))))
 
 
+def _curvature_density_multiplier(curvature: float, strength: float, max_multiplier: float) -> float:
+    normalized_curvature = min(1.0, max(0.0, curvature / pi))
+    boost = 1.0 + normalized_curvature * max(0.0, strength)
+    upper_bound = max(1.0, max_multiplier)
+    return min(upper_bound, max(1.0, boost))
+
+
 def resample_polyline(
     points: list[TrajectoryPoint],
     base_segment_density: float,
     curvature_refine_strength: float,
+    curvature_density_max_multiplier: float = 4.0,
 ) -> list[CurveSample]:
     if not points:
         return []
@@ -55,10 +63,15 @@ def resample_polyline(
         b = points[index + 1]
         tangent = normalize(sub(b.position, a.position))
         curvature = max(_segment_curvature(points, index), _segment_curvature(points, index + 1))
-        density = max(0.1, base_segment_density) * (1.0 + curvature * max(0.0, curvature_refine_strength))
+        density_multiplier = _curvature_density_multiplier(
+            curvature,
+            curvature_refine_strength,
+            curvature_density_max_multiplier,
+        )
+        density = max(0.01, base_segment_density) * density_multiplier
         steps = max(1, int(ceil(segment_length * density)))
 
-        for step in range(steps):
+        for step in range(steps + 1):
             if index > 0 and step == 0:
                 continue
             local_t = step / steps
@@ -76,15 +89,4 @@ def resample_polyline(
             )
         walked += segment_length
 
-    final = points[-1]
-    previous = points[-2]
-    samples.append(
-        CurveSample(
-            position=final.position,
-            tangent=normalize(sub(final.position, previous.position)),
-            speed=final.speed,
-            arc_length=total_length,
-            t=1.0,
-        )
-    )
     return samples

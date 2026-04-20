@@ -9,6 +9,7 @@ from waterfall_tool.operators import preview as preview_ops
 from waterfall_tool.operators.preview import (
     apply_persistent_handler,
     refresh_curve_preview,
+    resolve_curves_from_update,
     resolve_emitter_curve_targets,
     resolve_preview_parent,
     should_refresh_curve_from_update,
@@ -279,6 +280,27 @@ def test_should_refresh_curve_from_update_ignores_transform_only_updates():
     )
 
     assert should_refresh_curve_from_update(update) is False
+
+
+def test_resolve_curves_from_update_maps_curve_datablock_geometry_back_to_tool_curve():
+    curve_data = object()
+    curve = FakeObject(
+        "FlowCurve",
+        "CURVE",
+        props={"waterfall_flow_curve": True},
+        waterfall_emitter=SimpleNamespace(),
+        waterfall_curve=SimpleNamespace(),
+    )
+    curve.data = curve_data
+    update = SimpleNamespace(
+        id=curve_data,
+        is_updated_geometry=True,
+        is_updated_transform=False,
+    )
+
+    result = resolve_curves_from_update(update, {"FlowCurve": curve})
+
+    assert result == [curve]
 
 
 def test_bake_preview_mesh_copies_preview_world_transform_to_baked_object():

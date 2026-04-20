@@ -56,15 +56,21 @@ def read_flow_curve_points(curve_obj) -> tuple[list[tuple[float, float, float]],
     if not curve_obj.data.splines:
         return ([], [])
 
+    spline = curve_obj.data.splines[0]
     positions = _read_evaluated_curve_positions(curve_obj)
-    if not positions:
-        spline = curve_obj.data.splines[0]
-        spline_points = getattr(spline, "points", None)
-        if spline_points is None:
+    spline_points = getattr(spline, "points", None)
+    if spline_points is not None:
+        if not positions:
+            for spline_point in spline_points:
+                world = curve_obj.matrix_world @ spline_point.co.to_3d()
+                positions.append(tuple(world))
+    else:
+        bezier_positions = _read_bezier_curve_positions(curve_obj, spline)
+        bezier_points = list(getattr(spline, "bezier_points", ()))
+        if bezier_positions and (not positions or len(positions) <= len(bezier_points)):
+            positions = bezier_positions
+        if not positions:
             return ([], [])
-        for spline_point in spline_points:
-            world = curve_obj.matrix_world @ spline_point.co.to_3d()
-            positions.append(tuple(world))
 
     speeds = _interpolate_speed_cache(curve_obj.get("waterfall_speed_cache", []), len(positions))
     return (positions, speeds)
@@ -82,9 +88,66 @@ def _read_evaluated_curve_positions(curve_obj) -> list[tuple[float, float, float
     evaluated = curve_obj.evaluated_get(depsgraph)
     mesh = evaluated.to_mesh()
     try:
-        return [tuple(curve_obj.matrix_world @ vertex.co) for vertex in mesh.vertices]
+        matrix_world = getattr(evaluated, "matrix_world", curve_obj.matrix_world)
+        return [tuple(matrix_world @ vertex.co) for vertex in mesh.vertices]
     finally:
         evaluated.to_mesh_clear()
+
+
+def _read_bezier_curve_positions(curve_obj, spline) -> list[tuple[float, float, float]]:
+    bezier_points = list(getattr(spline, "bezier_points", ()))
+    if not bezier_points:
+        return []
+
+    resolution = max(1, int(getattr(spline, "resolution_u", getattr(curve_obj.data, "resolution_u", 12))))
+    cyclic = bool(getattr(spline, "use_cyclic_u", False))
+    segment_count = len(bezier_points) if cyclic else len(bezier_points) - 1
+    if segment_count <= 0:
+        world = curve_obj.matrix_world @ bezier_points[0].co
+        return [tuple(world)]
+
+    positions: list[tuple[float, float, float]] = []
+    for segment_index in range(segment_count):
+        start = bezier_points[segment_index]
+        end = bezier_points[(segment_index + 1) % len(bezier_points)]
+        for step in range(resolution + 1):
+            if segment_index > 0 and step == 0:
+                continue
+            t = step / resolution
+            point = _sample_cubic_bezier(
+                start.co,
+                start.handle_right,
+                end.handle_left,
+                end.co,
+                t,
+            )
+            world = curve_obj.matrix_world @ point
+            positions.append(tuple(world))
+    return positions
+
+
+def _sample_cubic_bezier(p0, p1, p2, p3, t: float):
+    one_minus_t = 1.0 - t
+    x0, y0, z0 = tuple(p0)
+    x1, y1, z1 = tuple(p1)
+    x2, y2, z2 = tuple(p2)
+    x3, y3, z3 = tuple(p3)
+    return type(p0)(
+        (
+            x0 * (one_minus_t ** 3)
+            + x1 * (3.0 * one_minus_t * one_minus_t * t)
+            + x2 * (3.0 * one_minus_t * t * t)
+            + x3 * (t ** 3),
+            y0 * (one_minus_t ** 3)
+            + y1 * (3.0 * one_minus_t * one_minus_t * t)
+            + y2 * (3.0 * one_minus_t * t * t)
+            + y3 * (t ** 3),
+            z0 * (one_minus_t ** 3)
+            + z1 * (3.0 * one_minus_t * one_minus_t * t)
+            + z2 * (3.0 * one_minus_t * t * t)
+            + z3 * (t ** 3),
+        )
+    )
 
 
 def _interpolate_speed_cache(speed_cache, count: int) -> list[float]:

@@ -62,8 +62,26 @@ if bpy is not None:
             update=_refresh_from_curve,
         )
         preview_enabled: bpy.props.BoolProperty(name="Preview Enabled", default=True, update=_refresh_from_curve)
-        base_segment_density: bpy.props.FloatProperty(name="Base Segment Density", default=1.0, min=0.1, update=_refresh_from_curve)
+        base_segment_density: bpy.props.FloatProperty(name="Base Segment Density", default=1.0, min=0.01, update=_refresh_from_curve)
         curvature_refine_strength: bpy.props.FloatProperty(name="Curvature Refine Strength", default=1.0, min=0.0, update=_refresh_from_curve)
+        curvature_density_max_multiplier: bpy.props.FloatProperty(
+            name="Curvature Max Multiplier",
+            default=4.0,
+            min=1.0,
+            update=_refresh_from_curve,
+        )
+        target_face_count: bpy.props.IntProperty(
+            name="Target Face Count",
+            default=0,
+            min=0,
+            update=_refresh_from_curve,
+        )
+        max_segment_count: bpy.props.IntProperty(
+            name="Max Segment Count",
+            default=0,
+            min=0,
+            update=_refresh_from_curve,
+        )
         start_width: bpy.props.FloatProperty(name="Start Width", default=1.0, min=0.0, update=_refresh_from_curve)
         end_width: bpy.props.FloatProperty(name="End Width", default=1.0, min=0.0, update=_refresh_from_curve)
         width_falloff: bpy.props.FloatProperty(name="Width Falloff", default=1.0, min=0.001, update=_refresh_from_curve)

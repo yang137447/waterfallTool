@@ -12,10 +12,10 @@ def test_mesh_has_two_card_strips_with_quad_faces():
         [point((0.0, 0.0, 0.0), 1.0), point((0.0, 0.0, -1.0), 2.0), point((0.0, 0.0, -2.0), 3.0)],
         settings,
     )
-    assert len(mesh.vertices) == 8
-    assert len(mesh.faces) == 2
-    assert len(mesh.uv0) == 2
-    assert len(mesh.uv1) == 2
+    assert len(mesh.vertices) == 12
+    assert len(mesh.faces) == 4
+    assert len(mesh.uv0) == 4
+    assert len(mesh.uv1) == 4
 
 
 def test_width_changes_along_curve():
@@ -47,3 +47,100 @@ def test_speed_normalization_uses_collapsed_samples():
     uv1_values = [uv for face in mesh.uv1 for uv in face]
     assert min(value[1] for value in uv1_values) == 0.0
     assert max(value[1] for value in uv1_values) == 1.0
+
+
+def test_max_segment_count_hard_caps_generated_faces():
+    points = [
+        point((0.0, 0.0, 0.0), 1.0),
+        point((0.5, 1.0, -0.4), 1.2),
+        point((1.0, -1.0, -0.8), 1.4),
+        point((1.5, 1.2, -1.2), 1.6),
+        point((2.0, 0.0, -1.6), 1.8),
+    ]
+    uncapped = build_x_card_mesh(
+        points,
+        MeshSettings(
+            base_segment_density=1.0,
+            curvature_refine_strength=6.0,
+            curvature_density_max_multiplier=8.0,
+            max_segment_count=0,
+        ),
+    )
+    capped = build_x_card_mesh(
+        points,
+        MeshSettings(
+            base_segment_density=1.0,
+            curvature_refine_strength=6.0,
+            curvature_density_max_multiplier=8.0,
+            max_segment_count=4,
+        ),
+    )
+
+    assert len(capped.faces) < len(uncapped.faces)
+    assert len(capped.faces) == 8
+
+
+def test_target_face_count_controls_rebuild_face_budget():
+    points = [
+        point((0.0, 0.0, 0.0), 1.0),
+        point((0.5, 1.0, -0.4), 1.2),
+        point((1.0, -1.0, -0.8), 1.4),
+        point((1.5, 1.2, -1.2), 1.6),
+        point((2.0, 0.0, -1.6), 1.8),
+    ]
+    mesh = build_x_card_mesh(
+        points,
+        MeshSettings(
+            base_segment_density=1.0,
+            curvature_refine_strength=6.0,
+            curvature_density_max_multiplier=8.0,
+            target_face_count=10,
+            max_segment_count=0,
+        ),
+    )
+
+    assert len(mesh.faces) == 10
+
+
+def test_target_face_count_rounds_up_to_even_face_total_for_dual_strip_mesh():
+    points = [
+        point((0.0, 0.0, 0.0), 1.0),
+        point((0.5, 1.0, -0.4), 1.2),
+        point((1.0, -1.0, -0.8), 1.4),
+        point((1.5, 1.2, -1.2), 1.6),
+        point((2.0, 0.0, -1.6), 1.8),
+    ]
+    mesh = build_x_card_mesh(
+        points,
+        MeshSettings(
+            base_segment_density=1.0,
+            curvature_refine_strength=6.0,
+            curvature_density_max_multiplier=8.0,
+            target_face_count=9,
+            max_segment_count=0,
+        ),
+    )
+
+    assert len(mesh.faces) == 10
+
+
+def test_max_segment_count_still_clamps_when_target_face_count_is_higher():
+    points = [
+        point((0.0, 0.0, 0.0), 1.0),
+        point((0.5, 1.0, -0.4), 1.2),
+        point((1.0, -1.0, -0.8), 1.4),
+        point((1.5, 1.2, -1.2), 1.6),
+        point((2.0, 0.0, -1.6), 1.8),
+    ]
+    mesh = build_x_card_mesh(
+        points,
+        MeshSettings(
+            base_segment_density=1.0,
+            curvature_refine_strength=6.0,
+            curvature_density_max_multiplier=8.0,
+            target_face_count=20,
+            max_segment_count=3,
+        ),
+    )
+
+    assert len(mesh.faces) == 6

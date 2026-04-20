@@ -72,3 +72,59 @@ def test_resample_polyline_collapsed_anchor_uses_latest_speed_metadata():
     )
     assert samples[0].position == (0.0, 0.0, 0.0)
     assert samples[0].speed == 5.0
+
+
+def test_resample_polyline_preserves_interior_anchors_when_each_segment_only_needs_one_step():
+    samples = resample_polyline(
+        [
+            point((0.0, 0.0, 0.0)),
+            point((0.2, 0.2, 0.0)),
+            point((0.4, 0.5, 0.0)),
+            point((0.7, 0.9, 0.1)),
+        ],
+        base_segment_density=1.0,
+        curvature_refine_strength=0.0,
+    )
+
+    assert [sample.position for sample in samples] == [
+        (0.0, 0.0, 0.0),
+        (0.2, 0.2, 0.0),
+        (0.4, 0.5, 0.0),
+        (0.7, 0.9, 0.1),
+    ]
+
+
+def test_curvature_density_max_multiplier_limits_extra_subdivision():
+    bent = [point((0.0, 0.0, 0.0)), point((1.0, 0.0, -1.0)), point((0.0, 0.0, -2.0))]
+    uncapped = resample_polyline(
+        bent,
+        base_segment_density=1.0,
+        curvature_refine_strength=6.0,
+        curvature_density_max_multiplier=10.0,
+    )
+    capped = resample_polyline(
+        bent,
+        base_segment_density=1.0,
+        curvature_refine_strength=6.0,
+        curvature_density_max_multiplier=1.2,
+    )
+
+    assert len(capped) < len(uncapped)
+
+
+def test_curvature_density_max_multiplier_equal_one_disables_curvature_boost():
+    bent = [point((0.0, 0.0, 0.0)), point((1.0, 0.0, -1.0)), point((0.0, 0.0, -2.0))]
+    base_only = resample_polyline(
+        bent,
+        base_segment_density=1.0,
+        curvature_refine_strength=0.0,
+        curvature_density_max_multiplier=10.0,
+    )
+    clamped = resample_polyline(
+        bent,
+        base_segment_density=1.0,
+        curvature_refine_strength=6.0,
+        curvature_density_max_multiplier=1.0,
+    )
+
+    assert len(clamped) == len(base_only)

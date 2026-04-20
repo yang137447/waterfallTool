@@ -21,6 +21,9 @@ class EmitterSettings:
 class MeshSettings:
     base_segment_density: float = 1.0
     curvature_refine_strength: float = 1.0
+    curvature_density_max_multiplier: float = 4.0
+    target_face_count: int = 0
+    max_segment_count: int = 0
     start_width: float = 1.0
     end_width: float = 1.0
     width_falloff: float = 1.0

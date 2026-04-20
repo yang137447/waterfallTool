@@ -106,6 +106,33 @@ def should_refresh_curve_from_update(update) -> bool:
     return _is_flow_curve_object(obj) and bool(getattr(update, "is_updated_geometry", False))
 
 
+def _iter_data_objects(data_objects):
+    if data_objects is None:
+        return ()
+    values = getattr(data_objects, "values", None)
+    if callable(values):
+        return values()
+    return data_objects
+
+
+def resolve_curves_from_update(update, data_objects) -> list:
+    if not bool(getattr(update, "is_updated_geometry", False)):
+        return []
+
+    obj = getattr(update, "id", None)
+    if _is_flow_curve_object(obj):
+        return [obj]
+
+    if obj is None:
+        return []
+
+    result = []
+    for candidate in _iter_data_objects(data_objects):
+        if _is_flow_curve_object(candidate) and getattr(candidate, "data", None) is obj:
+            result.append(candidate)
+    return result
+
+
 def _should_build_preview_mesh(preview_enabled: bool, allow_when_preview_disabled: bool) -> bool:
     return preview_enabled or allow_when_preview_disabled
 
@@ -145,6 +172,9 @@ def refresh_curve_preview(curve, context, *, allow_when_preview_disabled: bool =
     mesh_settings = MeshSettings(
         base_segment_density=props.base_segment_density,
         curvature_refine_strength=props.curvature_refine_strength,
+        curvature_density_max_multiplier=getattr(props, "curvature_density_max_multiplier", 4.0),
+        target_face_count=getattr(props, "target_face_count", 0),
+        max_segment_count=getattr(props, "max_segment_count", 0),
         start_width=props.start_width,
         end_width=props.end_width,
         width_falloff=props.width_falloff,
@@ -169,9 +199,8 @@ if bpy is not None:
     def depsgraph_refresh(scene, depsgraph):
         context = bpy.context
         for update in depsgraph.updates:
-            if should_refresh_curve_from_update(update):
-                obj = update.id
-                refresh_curve_preview(obj, context)
+            for curve in resolve_curves_from_update(update, _scene_objects()):
+                refresh_curve_preview(curve, context)
     depsgraph_refresh = apply_persistent_handler(depsgraph_refresh, bpy)
 
 
