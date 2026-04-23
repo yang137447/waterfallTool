@@ -34,6 +34,10 @@ python -m pytest
 "C:\Software\blender-4.2.3-windows-x64\blender.exe" --background --factory-startup --python scripts/smoke_blender_addon.py
 ```
 
+Blender 安装在 `C:\Software\blender-4.2.3-windows-x64` 时，插件安装目录为：
+
+`C:\Software\blender-4.2.3-windows-x64\4.2\scripts\addons\`
+
 **适用场景**：
 - 升级或修改 Blender API 适配层（`adapters/`）。
 - 变更插件属性定义（`properties.py`）。
@@ -43,10 +47,19 @@ python -m pytest
 
 - **改核心源码 (`core/`)**：至少跑 pytest。
 - **改适配层 (`adapters/`) 或 UI (`panel.py`)**：至少跑 Blender Smoke Test。
+- **改 Emitter 识别、对象属性或多对象隔离逻辑**：至少跑 pytest 和 Blender Smoke Test，并确认两个 Empty 可分别启用、分别生成、互不串扰。
+- **改 Global/Object 参数归属或面板结构**：至少跑 pytest 和 Blender Smoke Test，并确认全局物理参数与对象发射/预览参数已彻底分离。
+- **改面板分组或折叠逻辑**：至少执行 Blender Smoke Test，并人工检查 `Global Properties`、`Object Properties`、`Mesh Preview`、`Termination`、`Cutoff Guide` 的归属和折叠状态是否清晰。
+- **改终止规则或自由模拟停止条件**：至少跑 `test_trajectory.py`，确认 `Terminal Speed` 与 `Cutoff Height` 的任一终止逻辑符合预期，且不影响 `Physics Assisted`。
+- **改碰撞响应或附着表面运动**：至少跑 `test_trajectory.py`，确认命中表面后会沿切向继续运动、速度会因接触摩擦合理衰减，小型采样缝隙不会立即离面弹起，附着流向会保留主流惯性并避免单步硬转折，且持续失去接触后能恢复自由落体。
+- **改 Cutoff Height 视口辅助显示**：至少跑相关单测并执行 Blender Smoke Test，确认线框高度、XY 偏移和尺寸参数都能生效。
+- **改宽度语义或网格尺度逻辑**：至少跑 `test_curve_sampling.py` 和 `test_mesh_builder.py`，确认基准宽度、相对倍率，以及路径绕行时宽度不被弧长异常放大都按预期生效。
+- **改网格密度模型**：至少跑 `test_curve_sampling.py` 和 `test_mesh_builder.py`，确认 `Width Density`、`Longitudinal Step Length` 与 `Curvature Min Angle` 会正确影响横向分片和纵向采样。
+- **改 UV 语义或速度驱动拉伸逻辑**：至少跑 `test_mesh_builder.py` 和 Blender Smoke Test，确认只生成单层 UV 且 `UV Base Speed` 会正确影响 `V` 方向拉伸。
 - **发版或大范围重构**：两者皆需全部跑通。
 
 ## 测试踩坑收敛规则
 
 - 对于 `bpy` 相关的报错，优先在 `adapters/` 中封装安全的访问方法，而不是在 `core/` 中写死 `try-except`。
-- 如果 Blender 版本升级导致 API 废弃或时序行为变化，统一在 `adapters/` 中进行兼容性处理，并在 `AGENTS.md` 中记录新的坑点。
+- 如果 Blender 版本升级导致 API 废弃或时序行为变化，统一在 `adapters/` 中进行兼容性处理，并在 `docs/human-ai/known-issues.md` 中记录新的坑点。
 - 当集成测试偶发失败时，先区分是真实的逻辑回归，还是 Blender 内部 DepsGraph 未刷新的时序问题。

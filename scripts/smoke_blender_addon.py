@@ -23,8 +23,9 @@ emitter = bpy.data.objects.new("SmokeEmitter", None)
 bpy.context.collection.objects.link(emitter)
 bpy.context.view_layer.objects.active = emitter
 emitter.select_set(True)
+emitter.waterfall_emitter.enabled = True
 emitter.waterfall_emitter.speed = 6.0
-emitter.waterfall_emitter.simulation_step_count = 12
+bpy.context.scene.waterfall_global.simulation_step_count = 12
 bpy.ops.waterfall.simulate_curve()
 
 curve = bpy.data.objects.get(emitter.waterfall_emitter.flow_curve_name)
@@ -42,7 +43,7 @@ preview = bpy.data.objects.get(curve.waterfall_curve.preview_mesh_name)
 assert preview is not None
 assert preview.type == "MESH"
 assert "UV0" in preview.data.uv_layers
-assert "UV1_Speed" in preview.data.uv_layers
+assert len(preview.data.uv_layers) == 1
 
 bpy.ops.waterfall.bake_mesh()
 baked = bpy.data.objects.get(curve.waterfall_curve.baked_mesh_name)

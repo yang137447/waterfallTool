@@ -6,6 +6,8 @@ from ..core.types import MeshData
 def _set_follow_parent(obj, parent) -> None:
     if parent is None:
         return
+    if obj.parent == parent:
+        return
     obj.parent = parent
     obj.matrix_parent_inverse = parent.matrix_world.inverted()
     obj.matrix_world = parent.matrix_world
@@ -36,9 +38,6 @@ def create_or_update_mesh_object(context, name: str, mesh_data: MeshData, *, gen
     if mesh_data.uv0:
         uv0 = blender_mesh.uv_layers.new(name="UV0")
         _write_uv_layer(uv0, mesh_data.uv0)
-    if mesh_data.uv1:
-        uv1 = blender_mesh.uv_layers.new(name="UV1_Speed")
-        _write_uv_layer(uv1, mesh_data.uv1)
 
     obj["waterfall_generated"] = generated
     return obj

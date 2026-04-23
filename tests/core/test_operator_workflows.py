@@ -47,7 +47,7 @@ def test_resolve_emitter_curve_targets_handles_selected_emitter_or_curve():
     emitter = FakeObject(
         "Emitter",
         "EMPTY",
-        waterfall_emitter=SimpleNamespace(flow_curve_name="FlowCurve"),
+        waterfall_emitter=SimpleNamespace(enabled=True, flow_curve_name="FlowCurve"),
         waterfall_curve=SimpleNamespace(),
     )
     curve = FakeObject(
@@ -83,7 +83,7 @@ def test_resolve_emitter_curve_targets_ignores_non_tool_curve_name_collisions():
     emitter = FakeObject(
         "Emitter",
         "EMPTY",
-        waterfall_emitter=SimpleNamespace(flow_curve_name="FlowCurve"),
+        waterfall_emitter=SimpleNamespace(enabled=True, flow_curve_name="FlowCurve"),
         waterfall_curve=SimpleNamespace(),
     )
     unrelated = FakeObject(
@@ -138,7 +138,12 @@ def test_set_preview_hidden_ignores_non_generated_preview_name_collisions():
 
 
 def test_resolve_preview_parent_prefers_linked_emitter():
-    emitter = FakeObject("Emitter", "EMPTY", waterfall_emitter=SimpleNamespace(), waterfall_curve=SimpleNamespace())
+    emitter = FakeObject(
+        "Emitter",
+        "EMPTY",
+        waterfall_emitter=SimpleNamespace(enabled=True, flow_curve_name="FlowCurve"),
+        waterfall_curve=SimpleNamespace(),
+    )
     curve = FakeObject(
         "FlowCurve",
         "CURVE",
@@ -150,6 +155,26 @@ def test_resolve_preview_parent_prefers_linked_emitter():
     parent = resolve_preview_parent(curve, {"Emitter": emitter})
 
     assert parent is emitter
+
+
+def test_resolve_emitter_curve_targets_ignores_disabled_empty_objects():
+    emitter = FakeObject(
+        "Emitter",
+        "EMPTY",
+        waterfall_emitter=SimpleNamespace(enabled=False, flow_curve_name="FlowCurve"),
+        waterfall_curve=SimpleNamespace(),
+    )
+    curve = FakeObject(
+        "FlowCurve",
+        "CURVE",
+        props={"waterfall_flow_curve": True},
+        waterfall_emitter=SimpleNamespace(),
+        waterfall_curve=SimpleNamespace(emitter_name="Emitter"),
+    )
+
+    selected = resolve_emitter_curve_targets(emitter, {"Emitter": emitter, "FlowCurve": curve})
+
+    assert selected == (None, None)
 
 
 def test_apply_persistent_handler_uses_blender_persistent_decorator_when_available():
@@ -188,13 +213,14 @@ def test_refresh_curve_preview_returns_none_and_hides_existing_preview_for_empty
             emitter_name="",
             preview_mesh_name="FlowCurve_Preview",
             baked_mesh_name="",
-            base_segment_density=1.0,
-            curvature_refine_strength=1.0,
+            width_density=1,
+            longitudinal_step_length=0.5,
+            curvature_min_angle_degrees=15.0,
             start_width=1.0,
             end_width=1.0,
             width_falloff=1.0,
             cross_angle=90.0,
-            uv_speed_scale=1.0,
+            uv_base_speed=1.0,
         ),
     )
 
@@ -229,13 +255,14 @@ def test_refresh_curve_preview_can_build_for_bake_while_preview_visibility_stays
             emitter_name="",
             preview_mesh_name="FlowCurve_Preview",
             baked_mesh_name="",
-            base_segment_density=1.0,
-            curvature_refine_strength=1.0,
+            width_density=1,
+            longitudinal_step_length=0.5,
+            curvature_min_angle_degrees=15.0,
             start_width=1.0,
             end_width=1.0,
             width_falloff=1.0,
             cross_angle=90.0,
-            uv_speed_scale=1.0,
+            uv_base_speed=1.0,
         ),
     )
 
@@ -280,6 +307,25 @@ def test_should_refresh_curve_from_update_ignores_transform_only_updates():
     )
 
     assert should_refresh_curve_from_update(update) is False
+
+
+def test_resolve_curves_from_update_ignores_transform_only_tool_curve_updates():
+    curve = FakeObject(
+        "FlowCurve",
+        "CURVE",
+        props={"waterfall_flow_curve": True},
+        waterfall_emitter=SimpleNamespace(),
+        waterfall_curve=SimpleNamespace(),
+    )
+    update = SimpleNamespace(
+        id=curve,
+        is_updated_geometry=False,
+        is_updated_transform=True,
+    )
+
+    result = resolve_curves_from_update(update, {"FlowCurve": curve})
+
+    assert result == []
 
 
 def test_resolve_curves_from_update_maps_curve_datablock_geometry_back_to_tool_curve():

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from ..core.types import TrajectoryPoint
+from ..core.vector_math import length, sub
 
 
 def _set_follow_parent(obj, parent) -> None:
     if parent is None:
+        return
+    if obj.parent == parent:
         return
     obj.parent = parent
     obj.matrix_parent_inverse = parent.matrix_world.inverted()
@@ -38,6 +41,7 @@ def create_or_update_flow_curve(context, name: str, points: list[TrajectoryPoint
 
     curve_obj["waterfall_flow_curve"] = True
     curve_obj["waterfall_speed_cache"] = [point.speed for point in points]
+    curve_obj["waterfall_speed_t_cache"] = _build_normalized_arc_parameters([point.position for point in points])
     return curve_obj
 
 
@@ -57,14 +61,13 @@ def read_flow_curve_points(curve_obj) -> tuple[list[tuple[float, float, float]],
         return ([], [])
 
     spline = curve_obj.data.splines[0]
-    positions = _read_evaluated_curve_positions(curve_obj)
     spline_points = getattr(spline, "points", None)
     if spline_points is not None:
+        positions = _read_poly_curve_positions(curve_obj, spline_points)
         if not positions:
-            for spline_point in spline_points:
-                world = curve_obj.matrix_world @ spline_point.co.to_3d()
-                positions.append(tuple(world))
+            positions = _read_evaluated_curve_positions(curve_obj)
     else:
+        positions = _read_evaluated_curve_positions(curve_obj)
         bezier_positions = _read_bezier_curve_positions(curve_obj, spline)
         bezier_points = list(getattr(spline, "bezier_points", ()))
         if bezier_positions and (not positions or len(positions) <= len(bezier_points)):
@@ -72,8 +75,46 @@ def read_flow_curve_points(curve_obj) -> tuple[list[tuple[float, float, float]],
         if not positions:
             return ([], [])
 
-    speeds = _interpolate_speed_cache(curve_obj.get("waterfall_speed_cache", []), len(positions))
+    speed_cache = curve_obj.get("waterfall_speed_cache", [])
+    if not speed_cache:
+        fallback_speed = _fallback_curve_speed_from_emitter(curve_obj)
+        if fallback_speed is not None:
+            speed_cache = [fallback_speed]
+
+    speeds = _interpolate_speed_cache(speed_cache, curve_obj.get("waterfall_speed_t_cache", []), positions)
     return (positions, speeds)
+
+
+def _fallback_curve_speed_from_emitter(curve_obj) -> float | None:
+    curve_props = getattr(curve_obj, "waterfall_curve", None)
+    emitter_name = getattr(curve_props, "emitter_name", "") if curve_props is not None else ""
+    if not emitter_name:
+        return None
+    try:
+        import bpy
+    except ModuleNotFoundError:
+        return None
+
+    emitter = getattr(getattr(bpy, "data", None), "objects", None)
+    emitter = emitter.get(emitter_name) if emitter is not None else None
+    if emitter is None:
+        return None
+    emitter_props = getattr(emitter, "waterfall_emitter", None)
+    speed = getattr(emitter_props, "speed", None) if emitter_props is not None else None
+    if speed is None:
+        return None
+    return float(speed)
+
+
+def _read_poly_curve_positions(curve_obj, spline_points) -> list[tuple[float, float, float]]:
+    positions: list[tuple[float, float, float]] = []
+    for spline_point in spline_points:
+        if not hasattr(spline_point, "co"):
+            return []
+        local = spline_point.co.to_3d() if hasattr(spline_point.co, "to_3d") else spline_point.co
+        world = curve_obj.matrix_world @ local
+        positions.append(tuple(world))
+    return positions
 
 
 def _read_evaluated_curve_positions(curve_obj) -> list[tuple[float, float, float]]:
@@ -150,7 +191,25 @@ def _sample_cubic_bezier(p0, p1, p2, p3, t: float):
     )
 
 
-def _interpolate_speed_cache(speed_cache, count: int) -> list[float]:
+def _build_normalized_arc_parameters(positions) -> list[float]:
+    count = len(positions)
+    if count <= 0:
+        return []
+    if count == 1:
+        return [0.0]
+
+    cumulative = [0.0]
+    for index in range(count - 1):
+        cumulative.append(cumulative[-1] + length(sub(tuple(positions[index + 1]), tuple(positions[index]))))
+
+    total_length = cumulative[-1]
+    if total_length <= 1.0e-8:
+        return [index / (count - 1) for index in range(count)]
+    return [distance / total_length for distance in cumulative]
+
+
+def _interpolate_speed_cache(speed_cache, speed_t_cache, positions) -> list[float]:
+    count = len(positions)
     if count <= 0:
         return []
     if not speed_cache:
@@ -158,8 +217,24 @@ def _interpolate_speed_cache(speed_cache, count: int) -> list[float]:
     speeds = [float(speed) for speed in speed_cache]
     if len(speeds) == 1:
         return [speeds[0]] * count
-    if len(speeds) == count:
+    if len(speeds) == count and not speed_t_cache:
         return speeds
+
+    cache_t = [float(value) for value in speed_t_cache]
+    sample_t = _build_normalized_arc_parameters(positions)
+    if len(cache_t) == len(speeds):
+        result: list[float] = []
+        cache_index = 0
+        last_index = len(speeds) - 1
+        for value_t in sample_t:
+            while cache_index < last_index - 1 and cache_t[cache_index + 1] < value_t:
+                cache_index += 1
+            low = cache_index
+            high = min(last_index, low + 1)
+            span = cache_t[high] - cache_t[low]
+            local_t = 0.0 if span <= 1.0e-8 else (value_t - cache_t[low]) / span
+            result.append(speeds[low] + (speeds[high] - speeds[low]) * local_t)
+        return result
 
     last_index = len(speeds) - 1
     result: list[float] = []

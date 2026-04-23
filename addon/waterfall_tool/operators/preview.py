@@ -27,7 +27,8 @@ def _lookup_object(data_objects, name: str):
 
 
 def _is_emitter_object(obj) -> bool:
-    return getattr(obj, "type", None) == "EMPTY"
+    emitter_props = getattr(obj, "waterfall_emitter", None)
+    return getattr(obj, "type", None) == "EMPTY" and bool(getattr(emitter_props, "enabled", False))
 
 
 def _is_flow_curve_object(obj) -> bool:
@@ -154,14 +155,17 @@ def refresh_curve_preview(curve, context, *, allow_when_preview_disabled: bool =
         emitter = bpy.data.objects.get(props.emitter_name)
         if emitter is not None:
             emitter_props = emitter.waterfall_emitter
+            scene = getattr(context, "scene", None)
+            global_settings = getattr(scene, "waterfall_global", None)
             emitter_settings = EmitterSettings(
                 speed=emitter_props.speed,
-                gravity=emitter_props.gravity,
-                drag=emitter_props.drag,
-                time_step=emitter_props.simulation_time_step,
-                step_count=emitter_props.simulation_step_count,
-                attach_strength=emitter_props.attach_strength,
-                detach_threshold=emitter_props.detach_threshold,
+                gravity=getattr(global_settings, "gravity", 9.81),
+                drag=getattr(global_settings, "drag", 0.0),
+                time_step=getattr(global_settings, "simulation_time_step", 0.05),
+                step_count=getattr(global_settings, "simulation_step_count", 80),
+                attach_strength=getattr(global_settings, "attach_strength", 0.7),
+                detach_threshold=getattr(global_settings, "detach_threshold", 0.35),
+                surface_offset=getattr(global_settings, "surface_offset", 0.01),
             )
             collision_provider = BlenderVisibleMeshCollisionProvider(
                 context,
@@ -169,17 +173,24 @@ def refresh_curve_preview(curve, context, *, allow_when_preview_disabled: bool =
             )
             points = simulate_guided_trajectory(positions, speeds, emitter_settings, collision_provider)
 
+    scene = getattr(context, "scene", None)
+    global_settings = getattr(scene, "waterfall_global", None)
     mesh_settings = MeshSettings(
-        base_segment_density=props.base_segment_density,
-        curvature_refine_strength=props.curvature_refine_strength,
-        curvature_density_max_multiplier=getattr(props, "curvature_density_max_multiplier", 4.0),
-        target_face_count=getattr(props, "target_face_count", 0),
-        max_segment_count=getattr(props, "max_segment_count", 0),
+        width_density=props.width_density,
+        longitudinal_step_length=props.longitudinal_step_length,
+        curvature_min_angle_degrees=props.curvature_min_angle_degrees,
+        base_width=getattr(props, "base_width", 1.0),
         start_width=props.start_width,
         end_width=props.end_width,
         width_falloff=props.width_falloff,
+        speed_expansion=getattr(props, "speed_expansion", 0.0),
+        enable_cross_strip=getattr(props, "enable_cross_strip", True),
         cross_angle_degrees=props.cross_angle,
-        uv_speed_scale=props.uv_speed_scale,
+        cross_width_scale=getattr(props, "cross_width_scale", 1.0),
+        uv_base_speed=props.uv_base_speed,
+        uv_speed_smoothing_length=getattr(props, "uv_speed_smoothing_length", 0.0),
+        cutoff_height=getattr(global_settings, "cutoff_height", None) if global_settings is not None else None,
+        align_end_to_cutoff_plane=True,
     )
     preview_name = props.preview_mesh_name or f"{curve.name}_Preview"
     mesh = build_x_card_mesh(points, mesh_settings)
@@ -195,12 +206,81 @@ def refresh_curve_preview(curve, context, *, allow_when_preview_disabled: bool =
 
 
 if bpy is not None:
+    _deferred_emitters = []
+    _deferred_curves = []
+    _is_timer_registered = False
+    _is_processing_deferred_updates = False
+
+    def _process_deferred_updates():
+        global _is_timer_registered, _is_processing_deferred_updates
+        _is_timer_registered = False
+        if _is_processing_deferred_updates:
+            return None
+        _is_processing_deferred_updates = True
+        
+        context = bpy.context
+        from .simulate import generate_or_resimulate_curve
+        
+        # Keep a local copy and clear globals to allow new updates to queue
+        emitter_names = list(_deferred_emitters)
+        curve_names = list(_deferred_curves)
+        _deferred_emitters.clear()
+        _deferred_curves.clear()
+        
+        processed_curves = set()
+
+        try:
+            for emitter_name in emitter_names:
+                emitter = bpy.data.objects.get(emitter_name)
+                if emitter is None:
+                    continue
+                curve = generate_or_resimulate_curve(emitter, context)
+                if curve is not None:
+                    processed_curves.add(curve.name)
+
+            for curve_name in curve_names:
+                if curve_name in processed_curves:
+                    continue
+                curve = bpy.data.objects.get(curve_name)
+                if curve is None or not _is_flow_curve_object(curve):
+                    continue
+                refresh_curve_preview(curve, context)
+                processed_curves.add(curve.name)
+        finally:
+            _is_processing_deferred_updates = False
+
+        return None # Don't run again
 
     def depsgraph_refresh(scene, depsgraph):
-        context = bpy.context
+        global _is_timer_registered
+        if _is_processing_deferred_updates:
+            return
+        
+        has_new_updates = False
+        
         for update in depsgraph.updates:
+            obj = getattr(update, "id", None)
+            
+            if getattr(update, "is_updated_geometry", False) and getattr(obj, "name", "").endswith("_Preview"):
+                continue
+
+            if _is_emitter_object(obj) and getattr(update, "is_updated_transform", False):
+                 # 只有当它是真正被设置为 waterfall_emitter 并且已经有相关绑定时才进行更新，防止普通空物体触发更新
+                 emitter_props = getattr(obj, "waterfall_emitter", None)
+                 if emitter_props and getattr(emitter_props, "flow_curve_name", ""):
+                     if obj.name not in _deferred_emitters:
+                         _deferred_emitters.append(obj.name)
+                         has_new_updates = True
+                 
             for curve in resolve_curves_from_update(update, _scene_objects()):
-                refresh_curve_preview(curve, context)
+                if curve.name not in _deferred_curves:
+                    _deferred_curves.append(curve.name)
+                    has_new_updates = True
+                
+        if has_new_updates and not _is_timer_registered:
+            bpy.app.timers.register(_process_deferred_updates, first_interval=0.01)
+            _is_timer_registered = True
+            
     depsgraph_refresh = apply_persistent_handler(depsgraph_refresh, bpy)
 
 

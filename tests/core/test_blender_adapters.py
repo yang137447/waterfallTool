@@ -1,4 +1,5 @@
 import math
+import pytest
 import sys
 import types
 
@@ -259,6 +260,7 @@ def test_create_or_update_flow_curve_writes_local_positions_on_existing_object(m
 
     spline = curve_obj.data.splines[0]
     assert spline.points[0].co == (2.0, 0.0, 0.0, 1.0)
+    assert curve_obj.get("waterfall_speed_t_cache") == [0.0]
 
 
 def test_create_or_update_flow_curve_parents_curve_to_emitter_for_follow_motion(monkeypatch):
@@ -329,14 +331,13 @@ def test_create_or_update_mesh_object_repeated_updates_do_not_duplicate_uv_layer
         vertices=[(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (1.0, 1.0, 0.0), (0.0, 1.0, 0.0)],
         faces=[(0, 1, 2, 3)],
         uv0=[[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]],
-        uv1=[[(0.1, 0.1), (0.9, 0.1), (0.9, 0.9), (0.1, 0.9)]],
     )
     context = FakeContext()
 
     create_or_update_mesh_object(context=context, name="Waterfall", mesh_data=mesh_data)
     create_or_update_mesh_object(context=context, name="Waterfall", mesh_data=mesh_data)
 
-    assert [layer.name for layer in mesh.uv_layers] == ["UV0", "UV1_Speed"]
+    assert [layer.name for layer in mesh.uv_layers] == ["UV0"]
 
 
 def test_create_or_update_flow_curve_does_not_mutate_unowned_conflicting_object(monkeypatch):
@@ -465,18 +466,16 @@ def test_create_or_update_flow_curve_accepts_empty_points(monkeypatch):
     assert result is curve_obj
     assert curve_obj.get("waterfall_flow_curve") is True
     assert curve_obj.get("waterfall_speed_cache") == []
+    assert curve_obj.get("waterfall_speed_t_cache") == []
 
 
-def test_read_flow_curve_points_prefers_evaluated_curve_vertices_when_available(monkeypatch):
+def test_read_flow_curve_points_prefers_poly_spline_points_over_evaluated_vertices(monkeypatch):
     class FakeEvaluatedCurve:
         def __init__(self):
             self._mesh = FakeCurveMesh(
                 [
-                    (0.0, 0.0, 0.0),
-                    (0.25, 0.5, -0.25),
-                    (0.5, 1.0, -0.5),
-                    (0.75, 1.5, -0.75),
-                    (1.0, 2.0, -1.0),
+                    (9.0, 9.0, 9.0),
+                    (8.0, 8.0, 8.0),
                 ]
             )
 
@@ -487,7 +486,16 @@ def test_read_flow_curve_points_prefers_evaluated_curve_vertices_when_available(
             return None
 
     curve_obj = types.SimpleNamespace(
-        data=types.SimpleNamespace(splines=[types.SimpleNamespace(points=[object(), object()])]),
+        data=types.SimpleNamespace(
+            splines=[
+                types.SimpleNamespace(
+                    points=[
+                        types.SimpleNamespace(co=FakeVector((0.0, 0.0, 0.0))),
+                        types.SimpleNamespace(co=FakeVector((1.0, 2.0, -1.0))),
+                    ]
+                )
+            ]
+        ),
         matrix_world=FakeMatrixWorld(),
         get=lambda key, default=None: [1.0, 3.0] if key == "waterfall_speed_cache" else default,
         evaluated_get=lambda _depsgraph: FakeEvaluatedCurve(),
@@ -497,12 +505,66 @@ def test_read_flow_curve_points_prefers_evaluated_curve_vertices_when_available(
 
     positions, speeds = read_flow_curve_points(curve_obj)
 
-    assert len(positions) == 5
+    assert len(positions) == 2
     assert positions[0] == (0.0, 0.0, 0.0)
     assert positions[-1] == (1.0, 2.0, -1.0)
     assert speeds[0] == 1.0
     assert speeds[-1] == 3.0
-    assert speeds[2] == 2.0
+
+
+def test_read_flow_curve_points_interpolates_speed_by_arc_parameter():
+    curve_obj = types.SimpleNamespace(
+        data=types.SimpleNamespace(
+            splines=[
+                types.SimpleNamespace(
+                    points=[
+                        types.SimpleNamespace(co=FakeVector((0.0, 0.0, 0.0))),
+                        types.SimpleNamespace(co=FakeVector((0.0, 0.0, -0.1))),
+                        types.SimpleNamespace(co=FakeVector((0.0, 0.0, -0.2))),
+                        types.SimpleNamespace(co=FakeVector((0.0, 0.0, -1.0))),
+                        types.SimpleNamespace(co=FakeVector((0.0, 0.0, -2.0))),
+                    ]
+                )
+            ]
+        ),
+        matrix_world=FakeMatrixWorld(),
+        get=lambda key, default=None: {
+            "waterfall_speed_cache": [10.0, 20.0, 30.0],
+            "waterfall_speed_t_cache": [0.0, 0.5, 1.0],
+        }.get(key, default),
+    )
+
+    positions, speeds = read_flow_curve_points(curve_obj)
+
+    assert positions[0] == (0.0, 0.0, 0.0)
+    assert positions[-1] == (0.0, 0.0, -2.0)
+    assert speeds == pytest.approx([10.0, 11.0, 12.0, 20.0, 30.0])
+
+
+def test_read_flow_curve_points_falls_back_to_emitter_speed_when_cache_missing(monkeypatch):
+    curve_obj = types.SimpleNamespace(
+        data=types.SimpleNamespace(
+            splines=[
+                types.SimpleNamespace(
+                    points=[
+                        types.SimpleNamespace(co=FakeVector((0.0, 0.0, 0.0))),
+                        types.SimpleNamespace(co=FakeVector((0.0, 0.0, -1.0))),
+                    ]
+                )
+            ]
+        ),
+        matrix_world=FakeMatrixWorld(),
+        get=lambda _key, default=None: default,
+        waterfall_curve=types.SimpleNamespace(emitter_name="Emitter"),
+    )
+    emitter_obj = types.SimpleNamespace(waterfall_emitter=types.SimpleNamespace(speed=7.5))
+    fake_bpy = types.SimpleNamespace(data=types.SimpleNamespace(objects=types.SimpleNamespace(get=lambda name: emitter_obj if name == "Emitter" else None)))
+    monkeypatch.setitem(sys.modules, "bpy", fake_bpy)
+
+    positions, speeds = read_flow_curve_points(curve_obj)
+
+    assert positions == [(0.0, 0.0, 0.0), (0.0, 0.0, -1.0)]
+    assert speeds == [7.5, 7.5]
 
 
 def test_read_flow_curve_points_uses_evaluated_object_world_transform(monkeypatch):
