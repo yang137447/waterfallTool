@@ -15,14 +15,16 @@
 ### `addon/waterfall_tool/core/` (核心算法)
 - **职责**：纯几何计算、曲线采样、轨迹模拟、网格构建。
 - **约束**：绝对禁止直接 import `bpy` 或强耦合 Blender 上下文。依赖于自定义的 `types.py` 等纯数据结构。
-- **轨迹物理约定**：自由模拟命中可支撑表面后，会在附着状态下沿表面滑动，并叠加接触摩擦耗散；附着阶段允许短距离贴面跟随、对表面法线做平滑过渡，核心逻辑专注于贴附与重力/阻力的平面投影，不附加人为的转向干预，以还原真实水流的滑动与下落特性；只有持续失去表面接触或法线支撑力不足时才回退为自由落体。
+- **轨迹物理约定**：自由模拟命中可支撑表面后，会在附着状态下沿表面滑动，并叠加接触摩擦耗散；附着阶段会在 `core.trajectory` 内通过多探针邻域采样构建宏观支撑面（位置与法线同时平滑），再将重力/阻力投影到该支撑面的切平面推进流线，配合 `surface_flow_radius/samples/relaxation/inertia` 抑制三角面级别抖动。只有持续失去表面接触或法线支撑力不足时才回退为自由落体。
 - **宽度约定**：X-card 宽度不是直接使用绝对世界单位，而是先基于曲线整体空间跨度计算基准宽度，再乘以起止相对倍率；路径绕行、碰撞滑行等只改变轨迹形状，不应把基准宽度额外放大。
+- **Cross Strip 过渡约定**：`cross_ramp_length` 控制垂直 cross strip 从薄到宽的过渡距离，用于在起始/脱附段平滑展开第二条卡片条带，避免顶部突兀立片。
 - **密度约定**：横向拓扑由 `width_density` 控制每条卡片横向分片数；纵向采样由 `longitudinal_step_length` 决定基础步长，并在局部曲率超过 `curvature_min_angle_degrees` 后进一步减小步长。
 - **UV 约定**：网格只生成一套 `UV0`；`V` 方向基于路径长度并按 `UV Base Speed / 当前速度` 做相对拉伸，用单层 UV 直接表达流速差异。
 
 ### `addon/waterfall_tool/adapters/` (适配层)
 - **职责**：Blender 数据结构（Curve, Mesh, Scene）与 Core 纯数据结构之间的转换。
 - **约束**：所有针对 Blender 具体 API 的读写封装在此，对内提供干净的隔离接口。
+- **碰撞命中过滤**：`adapters.blender_scene` 仅接受 front-face 射线命中；背面命中会被忽略，避免薄壁背面误触发附着。
 
 ### `addon/waterfall_tool/operators/` (操作符工作流)
 - **职责**：响应用户操作（如 Simulate, Preview, Bake），编排 Adapter 与 Core 进行实际工作。
@@ -31,9 +33,12 @@
 ### `addon/waterfall_tool/properties.py` & `panel.py` (表现层)
 - **职责**：定义 Blender UI 面板和挂载在 Object 上的属性（PropertyGroup）。
 - **补充约定**：Empty 只有在面板中显式启用后才视为 Waterfall Emitter；Emitter 参数、关联曲线名和预览网格名都按对象实例独立存储。
+- **发射器归属保护**：曲线重算时会校验 `flow_curve_name` 的所有权；若该名称已被其他 Emitter 占用（常见于复制对象后残留旧缓存），会自动分配当前 Emitter 的独立曲线名。
+- **复制继承约定**：当 Emitter 通过复制产生且引用了其他 Emitter 的曲线名时，重算会将原曲线的预览参数模板（`waterfall_curve` 形态/UV字段）复制到新曲线，并将源预览 Mesh 的材质槽复制到新预览 Mesh。
 - **全局参数模型**：当前场景提供 `Scene.waterfall_global` 作为 `Global Properties`，仅承载统一物理环境、终止规则、cutoff guide 和折叠 UI 状态。
 - **对象参数模型**：`waterfall_emitter` 仅保留 `enabled`、`speed`、`direction_axis` 和关联曲线名；`waterfall_curve` 保留预览形态、UV 与对象关联字段。
 - **面板约定**：`Global Properties` 与 `Object Properties` 都支持折叠；不再提供 Global/Object 双向同步按钮。
+- **多发射器约定**：`Global Simulation` 提供批量入口 `WATERFALL_OT_simulate_all_emitters`，会遍历并重算场景内全部 `enabled=True` 的 Empty 发射器；单对象入口仍由 `WATERFALL_OT_simulate_curve` 负责。
 - **终止规则**：自由模拟链路会读取 `Scene.waterfall_global` 的 `terminal_speed` 与 `cutoff_height`；满足“速度低于阈值”或“世界 Z 低于截止高度”任一条件即终止。该规则当前不作用于 `Physics Assisted` 重流。
 - **截止可视化**：`Cutoff Height` 通过 Blender 适配层生成一个 Scene 级线框辅助对象，支持 `XY Offset` 与 `XY Size`，用于在视口中直观显示终止平面范围。
 
@@ -42,8 +47,8 @@
 
 ## 运行时链路 (以生成曲线为例)
 
-1. **输入**：用户在 3D 视图面板点击 "Generate / Re-simulate Curve"。
-2. **路由**：触发 `WATERFALL_OT_simulate_curve` 操作符。
+1. **输入**：用户在 3D 视图面板点击 "Generate / Re-simulate Curve"（单发射器）或 "Generate All Emitters"（批量）。
+2. **路由**：分别触发 `WATERFALL_OT_simulate_curve` 或 `WATERFALL_OT_simulate_all_emitters` 操作符。
 3. **适配**：操作符通过 `adapters` 读取当前 Emitter 的 Transform 和属性。
 4. **计算**：调用 `core.trajectory.simulate_trajectory` 算出曲线控制点。
 5. **渲染**：调用 `adapters.blender_curve.create_or_update_flow_curve` 在 Blender 中生成或更新 Curve 对象。

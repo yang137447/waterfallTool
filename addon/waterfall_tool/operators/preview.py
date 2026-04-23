@@ -166,6 +166,10 @@ def refresh_curve_preview(curve, context, *, allow_when_preview_disabled: bool =
                 attach_strength=getattr(global_settings, "attach_strength", 0.7),
                 detach_threshold=getattr(global_settings, "detach_threshold", 0.35),
                 surface_offset=getattr(global_settings, "surface_offset", 0.01),
+                surface_flow_radius=getattr(global_settings, "surface_flow_radius", 0.35),
+                surface_flow_samples=getattr(global_settings, "surface_flow_samples", 8),
+                surface_flow_relaxation=getattr(global_settings, "surface_flow_relaxation", 0.85),
+                surface_flow_inertia=getattr(global_settings, "surface_flow_inertia", 0.7),
             )
             collision_provider = BlenderVisibleMeshCollisionProvider(
                 context,
@@ -187,6 +191,7 @@ def refresh_curve_preview(curve, context, *, allow_when_preview_disabled: bool =
         enable_cross_strip=getattr(props, "enable_cross_strip", True),
         cross_angle_degrees=props.cross_angle,
         cross_width_scale=getattr(props, "cross_width_scale", 1.0),
+        cross_ramp_length=getattr(props, "cross_ramp_length", 0.0),
         uv_base_speed=props.uv_base_speed,
         uv_speed_smoothing_length=getattr(props, "uv_speed_smoothing_length", 0.0),
         cutoff_height=getattr(global_settings, "cutoff_height", None) if global_settings is not None else None,

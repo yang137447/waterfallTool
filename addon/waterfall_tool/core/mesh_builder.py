@@ -19,6 +19,26 @@ def _build_strip_specs(settings: MeshSettings) -> tuple[tuple[float, bool], ...]
     return (primary_strip, cross_strip) if settings.enable_cross_strip else (primary_strip,)
 
 
+def _find_cross_ramp_start_arc_length(samples: list[CurveSample]) -> float:
+    if not samples:
+        return 0.0
+    for index in range(1, len(samples)):
+        previous_attached = samples[index - 1].surface_normal is not None
+        current_attached = samples[index].surface_normal is not None
+        if previous_attached and not current_attached:
+            return samples[index].arc_length
+    return samples[0].arc_length
+
+
+def _cross_ramp_weight(sample: CurveSample, settings: MeshSettings, ramp_start_arc_length: float) -> float:
+    if settings.cross_ramp_length <= 1.0e-8:
+        return 1.0
+    t = (sample.arc_length - ramp_start_arc_length) / settings.cross_ramp_length
+    t = max(0.0, min(1.0, t))
+    # Smoothstep: slow start near the lip and full width after transition length.
+    return t * t * (3.0 - 2.0 * t)
+
+
 def _build_expansion_widths(samples: list[CurveSample], settings: MeshSettings) -> list[float]:
     accumulated_expansion = 0.0
     expansion_widths: list[float] = []
@@ -50,10 +70,13 @@ def _end_face_max_z(
     expansion_width: float,
     settings: MeshSettings,
     strip_specs: tuple[tuple[float, bool], ...],
+    ramp_start_arc_length: float,
 ) -> float:
     result = sample.position[2]
     for strip_angle, is_cross_strip in strip_specs:
         width_multiplier = settings.cross_width_scale if is_cross_strip else 1.0
+        if is_cross_strip:
+            width_multiplier *= _cross_ramp_weight(sample, settings, ramp_start_arc_length)
         half_width = compute_width(settings, sample.t, expansion_width) * 0.5 * width_multiplier
         axis = _rotate_in_frame(frame.normal, frame.binormal, strip_angle)
         result = max(result, sample.position[2] + abs(axis[2]) * half_width)
@@ -83,7 +106,8 @@ def _extend_points_until_end_face_is_below_cutoff_plane(
 
         frames = build_frames(samples)
         expansion_widths = _build_expansion_widths(samples, settings)
-        last_max_z = _end_face_max_z(samples[-1], frames[-1], expansion_widths[-1], settings, strip_specs)
+        ramp_start_arc_length = _find_cross_ramp_start_arc_length(samples)
+        last_max_z = _end_face_max_z(samples[-1], frames[-1], expansion_widths[-1], settings, strip_specs, ramp_start_arc_length)
         if last_max_z <= cutoff_height - 1.0e-6:
             return working
 
@@ -322,15 +346,18 @@ def build_x_card_mesh(points: list[TrajectoryPoint], settings: MeshSettings) -> 
     stretched_v = _build_speed_stretched_v(points, samples, settings.uv_base_speed, settings.uv_speed_smoothing_length)
     mesh = MeshData()
     strip_specs = _build_strip_specs(settings)
+    cross_ramp_start_arc_length = _find_cross_ramp_start_arc_length(samples)
     row_stride = max(1, settings.width_density) + 1
     expansion_widths = _build_expansion_widths(samples, settings)
 
     for strip_angle, is_cross_strip in strip_specs:
         strip_start = len(mesh.vertices)
-
-        width_multiplier = settings.cross_width_scale if is_cross_strip else 1.0
+        base_width_multiplier = settings.cross_width_scale if is_cross_strip else 1.0
 
         for sample_index, (sample, frame, exp_width) in enumerate(zip(samples, frames, expansion_widths, strict=True)):
+            width_multiplier = base_width_multiplier
+            if is_cross_strip:
+                width_multiplier *= _cross_ramp_weight(sample, settings, cross_ramp_start_arc_length)
             half_width = compute_width(settings, sample.t, exp_width) * 0.5 * width_multiplier
             axis = _rotate_in_frame(frame.normal, frame.binormal, strip_angle)
             for column in range(row_stride):

@@ -77,6 +77,48 @@ def test_disabling_cross_strip_keeps_primary_surface_normal_strip():
     assert strip_axis[2] == pytest.approx(0.0)
 
 
+def test_cross_strip_width_ramps_from_thin_to_full_over_transition_length():
+    settings = MeshSettings(
+        base_width=2.0,
+        start_width=1.0,
+        end_width=1.0,
+        cross_width_scale=1.0,
+        cross_ramp_length=2.0,
+        cross_angle_degrees=90.0,
+        longitudinal_step_length=1.0,
+    )
+    mesh = build_x_card_mesh(
+        [point((0.0, 0.0, 0.0)), point((0.0, 0.0, -1.0)), point((0.0, 0.0, -2.0))],
+        settings,
+    )
+
+    row0_width = length(
+        (
+            mesh.vertices[7][0] - mesh.vertices[6][0],
+            mesh.vertices[7][1] - mesh.vertices[6][1],
+            mesh.vertices[7][2] - mesh.vertices[6][2],
+        )
+    )
+    row1_width = length(
+        (
+            mesh.vertices[9][0] - mesh.vertices[8][0],
+            mesh.vertices[9][1] - mesh.vertices[8][1],
+            mesh.vertices[9][2] - mesh.vertices[8][2],
+        )
+    )
+    row2_width = length(
+        (
+            mesh.vertices[11][0] - mesh.vertices[10][0],
+            mesh.vertices[11][1] - mesh.vertices[10][1],
+            mesh.vertices[11][2] - mesh.vertices[10][2],
+        )
+    )
+
+    assert row0_width == pytest.approx(0.0)
+    assert row0_width < row1_width < row2_width
+    assert row2_width == pytest.approx(2.0)
+
+
 def test_width_density_adds_horizontal_subdivisions():
     settings = MeshSettings(width_density=3, start_width=2.0, end_width=2.0, cross_angle_degrees=90.0, longitudinal_step_length=1.0)
     mesh = build_x_card_mesh(

@@ -3,6 +3,14 @@ from __future__ import annotations
 from ..core.types import TrajectoryPoint
 from ..core.vector_math import length, sub
 
+FLOW_CURVE_RESOLUTION = 24
+
+
+def _flow_curve_handle_type(index: int, point_count: int) -> str:
+    if index == 0 or index == point_count - 1:
+        return "VECTOR"
+    return "AUTO"
+
 
 def _set_follow_parent(obj, parent) -> None:
     if parent is None:
@@ -12,6 +20,31 @@ def _set_follow_parent(obj, parent) -> None:
     obj.parent = parent
     obj.matrix_parent_inverse = parent.matrix_world.inverted()
     obj.matrix_world = parent.matrix_world
+
+
+def _configure_generated_spline(curve_obj, curve_data, points, mathutils_module):
+    spline = curve_data.splines.new("BEZIER")
+    if hasattr(curve_data, "resolution_u"):
+        curve_data.resolution_u = FLOW_CURVE_RESOLUTION
+    if hasattr(curve_data, "render_resolution_u"):
+        curve_data.render_resolution_u = FLOW_CURVE_RESOLUTION
+    if hasattr(spline, "resolution_u"):
+        spline.resolution_u = FLOW_CURVE_RESOLUTION
+
+    bezier_points = spline.bezier_points
+    bezier_points.add(max(0, len(points) - 1))
+    world_to_local = curve_obj.matrix_world.inverted()
+
+    point_count = len(points)
+    for index, (bezier_point, trajectory_point) in enumerate(zip(bezier_points, points, strict=True)):
+        local_position = world_to_local @ mathutils_module.Vector(trajectory_point.position)
+        x, y, z = local_position
+        bezier_point.co = (x, y, z)
+        handle_type = _flow_curve_handle_type(index, point_count)
+        if hasattr(bezier_point, "handle_left_type"):
+            bezier_point.handle_left_type = handle_type
+        if hasattr(bezier_point, "handle_right_type"):
+            bezier_point.handle_right_type = handle_type
 
 
 def create_or_update_flow_curve(context, name: str, points: list[TrajectoryPoint], *, parent=None):
@@ -31,13 +64,7 @@ def create_or_update_flow_curve(context, name: str, points: list[TrajectoryPoint
     _set_follow_parent(curve_obj, parent)
 
     if points:
-        spline = curve_data.splines.new("POLY")
-        spline.points.add(max(0, len(points) - 1))
-        world_to_local = curve_obj.matrix_world.inverted()
-        for spline_point, trajectory_point in zip(spline.points, points, strict=True):
-            local_position = world_to_local @ mathutils.Vector(trajectory_point.position)
-            x, y, z = local_position
-            spline_point.co = (x, y, z, 1.0)
+        _configure_generated_spline(curve_obj, curve_data, points, mathutils)
 
     curve_obj["waterfall_flow_curve"] = True
     curve_obj["waterfall_speed_cache"] = [point.speed for point in points]

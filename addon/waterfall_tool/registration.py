@@ -5,6 +5,7 @@ CLASS_NAMES = (
     "WaterfallCurveSettings",
     "WaterfallGlobalSettings",
     "WATERFALL_OT_simulate_curve",
+    "WATERFALL_OT_simulate_all_emitters",
     "WATERFALL_OT_rebuild_preview",
     "WATERFALL_OT_bake_mesh",
     "WATERFALL_PT_curve_card_panel",
@@ -14,7 +15,7 @@ CLASS_NAMES = (
 def _classes() -> list[type]:
     from .operators.bake import WATERFALL_OT_bake_mesh
     from .operators.preview import WATERFALL_OT_rebuild_preview
-    from .operators.simulate import WATERFALL_OT_simulate_curve
+    from .operators.simulate import WATERFALL_OT_simulate_all_emitters, WATERFALL_OT_simulate_curve
     from .panel import WATERFALL_PT_curve_card_panel
     from .properties import WaterfallCurveSettings, WaterfallEmitterSettings, WaterfallGlobalSettings
 
@@ -23,6 +24,7 @@ def _classes() -> list[type]:
         WaterfallCurveSettings,
         WaterfallGlobalSettings,
         WATERFALL_OT_simulate_curve,
+        WATERFALL_OT_simulate_all_emitters,
         WATERFALL_OT_rebuild_preview,
         WATERFALL_OT_bake_mesh,
         WATERFALL_PT_curve_card_panel,

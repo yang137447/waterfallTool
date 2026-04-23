@@ -43,6 +43,11 @@ if bpy is not None:
                         global_sim.prop(global_settings, "attach_strength")
                         global_sim.prop(global_settings, "detach_threshold")
                         global_sim.prop(global_settings, "surface_offset")
+                        global_sim.prop(global_settings, "surface_flow_radius")
+                        global_sim.prop(global_settings, "surface_flow_samples")
+                        global_sim.prop(global_settings, "surface_flow_relaxation")
+                        global_sim.prop(global_settings, "surface_flow_inertia")
+                        global_sim.operator("waterfall.simulate_all_emitters")
 
                     if _draw_foldout(global_box, global_settings, "ui_global_termination_open", "Termination"):
                         global_termination = global_box.box()
@@ -117,6 +122,7 @@ if bpy is not None:
                     shape.prop(curve, "enable_cross_strip")
                     shape.prop(curve, "cross_angle")
                     shape.prop(curve, "cross_width_scale")
+                    shape.prop(curve, "cross_ramp_length")
 
                 if _draw_foldout(preview_body, global_settings, "ui_object_uv_open", "UV"):
                     uv = preview_body.box()

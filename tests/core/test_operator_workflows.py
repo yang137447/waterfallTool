@@ -15,6 +15,14 @@ from waterfall_tool.operators.preview import (
     should_refresh_curve_from_update,
     set_preview_hidden,
 )
+from waterfall_tool.operators.simulate import (
+    _copy_curve_style_from_template,
+    _copy_preview_materials,
+    _resolve_source_curve_template,
+    _resolve_curve_name_for_emitter,
+    generate_all_enabled_emitters,
+    iter_enabled_emitters,
+)
 
 
 class FakeObject:
@@ -41,6 +49,195 @@ class FakeObject:
 
     def hide_set(self, hidden: bool):
         self._hidden_calls.append(hidden)
+
+
+def test_iter_enabled_emitters_filters_only_enabled_empty_objects():
+    enabled_emitter = FakeObject(
+        "Emitter_A",
+        "EMPTY",
+        waterfall_emitter=SimpleNamespace(enabled=True),
+        waterfall_curve=SimpleNamespace(),
+    )
+    disabled_emitter = FakeObject(
+        "Emitter_B",
+        "EMPTY",
+        waterfall_emitter=SimpleNamespace(enabled=False),
+        waterfall_curve=SimpleNamespace(),
+    )
+    mesh_object = FakeObject(
+        "Mesh",
+        "MESH",
+        waterfall_emitter=SimpleNamespace(enabled=True),
+        waterfall_curve=SimpleNamespace(),
+    )
+
+    found = list(iter_enabled_emitters([enabled_emitter, disabled_emitter, mesh_object]))
+
+    assert found == [enabled_emitter]
+
+
+def test_generate_all_enabled_emitters_runs_for_each_enabled_empty(monkeypatch):
+    emitter_a = FakeObject(
+        "Emitter_A",
+        "EMPTY",
+        waterfall_emitter=SimpleNamespace(enabled=True),
+        waterfall_curve=SimpleNamespace(),
+    )
+    emitter_b = FakeObject(
+        "Emitter_B",
+        "EMPTY",
+        waterfall_emitter=SimpleNamespace(enabled=True),
+        waterfall_curve=SimpleNamespace(),
+    )
+    disabled = FakeObject(
+        "Emitter_C",
+        "EMPTY",
+        waterfall_emitter=SimpleNamespace(enabled=False),
+        waterfall_curve=SimpleNamespace(),
+    )
+
+    invoked: list[str] = []
+
+    def fake_generate(emitter, _context):
+        invoked.append(emitter.name)
+        return object()
+
+    monkeypatch.setattr("waterfall_tool.operators.simulate.generate_or_resimulate_curve", fake_generate)
+    generated_count = generate_all_enabled_emitters(SimpleNamespace(), [emitter_a, emitter_b, disabled])
+
+    assert generated_count == 2
+    assert invoked == ["Emitter_A", "Emitter_B"]
+
+
+def test_resolve_curve_name_for_emitter_reuses_its_own_existing_curve():
+    emitter = FakeObject(
+        "Emitter_A",
+        "EMPTY",
+        waterfall_emitter=SimpleNamespace(enabled=True, flow_curve_name="Emitter_A_FlowCurve"),
+        waterfall_curve=SimpleNamespace(),
+    )
+    own_curve = FakeObject(
+        "Emitter_A_FlowCurve",
+        "CURVE",
+        props={"waterfall_flow_curve": True},
+        waterfall_emitter=SimpleNamespace(),
+        waterfall_curve=SimpleNamespace(emitter_name="Emitter_A"),
+    )
+
+    name = _resolve_curve_name_for_emitter(emitter, {"Emitter_A_FlowCurve": own_curve})
+
+    assert name == "Emitter_A_FlowCurve"
+
+
+def test_resolve_curve_name_for_emitter_avoids_curve_name_copied_from_other_emitter():
+    emitter = FakeObject(
+        "Emitter_B",
+        "EMPTY",
+        waterfall_emitter=SimpleNamespace(enabled=True, flow_curve_name="Emitter_A_FlowCurve"),
+        waterfall_curve=SimpleNamespace(),
+    )
+    other_curve = FakeObject(
+        "Emitter_A_FlowCurve",
+        "CURVE",
+        props={"waterfall_flow_curve": True},
+        waterfall_emitter=SimpleNamespace(),
+        waterfall_curve=SimpleNamespace(emitter_name="Emitter_A"),
+    )
+
+    name = _resolve_curve_name_for_emitter(emitter, {"Emitter_A_FlowCurve": other_curve})
+
+    assert name == "Emitter_B_FlowCurve"
+
+
+def test_resolve_source_curve_template_returns_foreign_curve_when_name_is_copied():
+    emitter = FakeObject(
+        "Emitter_B",
+        "EMPTY",
+        waterfall_emitter=SimpleNamespace(enabled=True, flow_curve_name="Emitter_A_FlowCurve"),
+        waterfall_curve=SimpleNamespace(),
+    )
+    other_curve = FakeObject(
+        "Emitter_A_FlowCurve",
+        "CURVE",
+        props={"waterfall_flow_curve": True},
+        waterfall_emitter=SimpleNamespace(),
+        waterfall_curve=SimpleNamespace(emitter_name="Emitter_A"),
+    )
+
+    source_template = _resolve_source_curve_template(emitter, {"Emitter_A_FlowCurve": other_curve})
+
+    assert source_template is other_curve
+
+
+def test_copy_curve_style_from_template_copies_curve_shape_and_uv_fields():
+    source_curve = FakeObject(
+        "SourceCurve",
+        "CURVE",
+        props={"waterfall_flow_curve": True},
+        waterfall_emitter=SimpleNamespace(),
+        waterfall_curve=SimpleNamespace(
+            curve_mode="PHYSICS_ASSISTED",
+            preview_enabled=True,
+            width_density=3,
+            longitudinal_step_length=0.2,
+            curvature_min_angle_degrees=10.0,
+            start_width=1.2,
+            end_width=0.7,
+            width_falloff=1.4,
+            base_width=2.0,
+            speed_expansion=0.3,
+            enable_cross_strip=False,
+            cross_angle=45.0,
+            cross_width_scale=0.8,
+            cross_ramp_length=1.2,
+            uv_base_speed=6.0,
+            uv_speed_smoothing_length=0.5,
+        ),
+    )
+    target_curve = FakeObject(
+        "TargetCurve",
+        "CURVE",
+        props={"waterfall_flow_curve": True},
+        waterfall_emitter=SimpleNamespace(),
+        waterfall_curve=SimpleNamespace(
+            curve_mode="MANUAL_SHAPE",
+            preview_enabled=False,
+            width_density=1,
+            longitudinal_step_length=0.5,
+            curvature_min_angle_degrees=15.0,
+            start_width=1.0,
+            end_width=1.0,
+            width_falloff=1.0,
+            base_width=1.0,
+            speed_expansion=0.0,
+            enable_cross_strip=True,
+            cross_angle=90.0,
+            cross_width_scale=1.0,
+            cross_ramp_length=0.0,
+            uv_base_speed=8.0,
+            uv_speed_smoothing_length=0.0,
+        ),
+    )
+
+    _copy_curve_style_from_template(source_curve, target_curve)
+
+    assert target_curve.waterfall_curve.curve_mode == "PHYSICS_ASSISTED"
+    assert target_curve.waterfall_curve.width_density == 3
+    assert target_curve.waterfall_curve.base_width == 2.0
+    assert target_curve.waterfall_curve.enable_cross_strip is False
+    assert target_curve.waterfall_curve.cross_ramp_length == 1.2
+    assert target_curve.waterfall_curve.uv_speed_smoothing_length == 0.5
+
+
+def test_copy_preview_materials_replaces_target_material_stack():
+    source_preview = FakeObject("SourcePreview", "MESH")
+    target_preview = FakeObject("TargetPreview", "MESH")
+    source_preview.data = SimpleNamespace(materials=["Mat_A", "Mat_B"])
+    target_preview.data = SimpleNamespace(materials=["OldMat"])
+
+    _copy_preview_materials(source_preview, target_preview)
+
+    assert target_preview.data.materials == ["Mat_A", "Mat_B"]
 
 
 def test_resolve_emitter_curve_targets_handles_selected_emitter_or_curve():

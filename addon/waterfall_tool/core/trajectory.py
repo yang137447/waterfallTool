@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from math import acos, radians
+from math import cos, pi, sin
 
-from .types import CollisionProvider, EmitterSettings, TrajectoryPoint, Vector3
-from .vector_math import add, dot, length, normalize, project_on_plane, scale
+from .types import CollisionProvider, CollisionSample, EmitterSettings, TrajectoryPoint, Vector3
+from .vector_math import add, cross, dot, length, lerp, normalize, project_on_plane, scale
 
 SURFACE_FRICTION = 0.2
-SURFACE_NORMAL_BLEND = 0.75
+SURFACE_NORMAL_BLEND = 0.65
 SURFACE_FOLLOW_MULTIPLIER = 3.0
+WORLD_UP = (0.0, 0.0, 1.0)
 
 
 def _apply_drag(velocity: Vector3, drag: float, time_step: float) -> Vector3:
@@ -49,6 +50,116 @@ def _blend_surface_normal(previous_normal: Vector3, current_normal: Vector3) -> 
     if length(blended) <= 1.0e-8:
         return normalize(current_normal)
     return normalize(blended)
+
+
+def _clamp01(value: float) -> float:
+    return max(0.0, min(1.0, value))
+
+
+def _build_tangent_basis(surface_normal: Vector3, reference_direction: Vector3) -> tuple[Vector3, Vector3]:
+    normal = normalize(surface_normal)
+    tangent = project_on_plane(reference_direction, normal)
+    if length(tangent) <= 1.0e-8:
+        tangent = cross(normal, WORLD_UP)
+    if length(tangent) <= 1.0e-8:
+        tangent = cross(normal, (1.0, 0.0, 0.0))
+    tangent = normalize(tangent)
+    bitangent = normalize(cross(normal, tangent))
+    if length(bitangent) <= 1.0e-8:
+        bitangent = normalize(cross(normal, (0.0, 1.0, 0.0)))
+    return tangent, bitangent
+
+
+def _probe_surface_field(
+    anchor_point: Vector3,
+    base_normal: Vector3,
+    reference_direction: Vector3,
+    settings: EmitterSettings,
+    collision_provider: CollisionProvider,
+) -> CollisionSample:
+    probe_radius = max(settings.surface_flow_radius, settings.surface_offset * 2.0)
+    probe_samples = max(4, settings.surface_flow_samples)
+    probe_normal = normalize(base_normal)
+    tangent, bitangent = _build_tangent_basis(probe_normal, reference_direction)
+    probe_start_height = probe_radius + settings.surface_offset
+    probe_depth = probe_radius * 2.0 + settings.surface_offset * 2.0
+    offsets = [(0.0, 0.0, 0.0)]
+
+    for index in range(probe_samples):
+        angle = 2.0 * pi * (index / probe_samples)
+        radial = add(
+            scale(tangent, cos(angle) * probe_radius),
+            scale(bitangent, sin(angle) * probe_radius),
+        )
+        offsets.append(radial)
+
+    weighted_point = (0.0, 0.0, 0.0)
+    weighted_normal = (0.0, 0.0, 0.0)
+    weighted_support = 0.0
+    weight_sum = 0.0
+
+    for offset in offsets:
+        start = add(anchor_point, add(scale(probe_normal, probe_start_height), offset))
+        end = add(anchor_point, add(scale(probe_normal, -probe_depth), offset))
+        sample = collision_provider.sample(start, end)
+        if not sample.hit:
+            continue
+        radial_distance = length(offset)
+        weight = 1.0 / (1.0 + (radial_distance / max(probe_radius, 1.0e-8)))
+        weighted_point = add(weighted_point, scale(sample.point, weight))
+        weighted_normal = add(weighted_normal, scale(sample.normal, weight))
+        weighted_support += sample.support * weight
+        weight_sum += weight
+
+    if weight_sum <= 1.0e-8:
+        return CollisionSample(hit=False)
+
+    averaged_point = scale(weighted_point, 1.0 / weight_sum)
+    averaged_normal = normalize(scale(weighted_normal, 1.0 / weight_sum))
+    averaged_support = max(0.0, min(1.0, weighted_support / weight_sum))
+    return CollisionSample(
+        hit=True,
+        point=averaged_point,
+        normal=averaged_normal,
+        support=averaged_support,
+    )
+
+
+def _resolve_surface_collision(
+    raw_collision: CollisionSample,
+    previous_surface_normal: Vector3,
+    impact_velocity: Vector3,
+    settings: EmitterSettings,
+    collision_provider: CollisionProvider,
+) -> tuple[CollisionSample, Vector3]:
+    if settings.surface_flow_radius <= 1.0e-8:
+        normal = normalize(raw_collision.normal)
+        return raw_collision, normal
+
+    base_normal = normalize(previous_surface_normal if length(previous_surface_normal) > 1.0e-8 else raw_collision.normal)
+    field_sample = _probe_surface_field(
+        raw_collision.point,
+        base_normal,
+        impact_velocity,
+        settings,
+        collision_provider,
+    )
+    if not field_sample.hit:
+        normal = normalize(raw_collision.normal)
+        return raw_collision, normal
+
+    relaxation = _clamp01(settings.surface_flow_relaxation)
+    resolved_point = lerp(raw_collision.point, field_sample.point, relaxation)
+    raw_normal = normalize(raw_collision.normal)
+    field_normal = normalize(field_sample.normal)
+    resolved_normal = _blend_surface_normal(raw_normal, field_normal)
+    resolved = CollisionSample(
+        hit=True,
+        point=resolved_point,
+        normal=resolved_normal,
+        support=max(raw_collision.support, field_sample.support),
+    )
+    return resolved, resolved_normal
 
 
 def _sample_surface_follow(
@@ -103,13 +214,23 @@ def simulate_trajectory(
     points = [TrajectoryPoint(position=start_position, velocity=velocity, speed=length(velocity), attached=False, surface_normal=None)]
     position = start_position
     attached = False
-    surface_normal = (0.0, 0.0, 1.0)
+    surface_normal = WORLD_UP
 
     for _ in range(settings.step_count):
         was_attached = attached
         previous_surface_normal = surface_normal
         if was_attached:
             candidate_velocity = _advance_attached(velocity, surface_normal, settings)
+            inertial_weight = _clamp01(settings.surface_flow_inertia)
+            if inertial_weight > 0.0:
+                previous_tangent = project_on_plane(velocity, surface_normal)
+                next_tangent = project_on_plane(candidate_velocity, surface_normal)
+                blended_tangent = add(
+                    scale(previous_tangent, inertial_weight),
+                    scale(next_tangent, 1.0 - inertial_weight),
+                )
+                if length(blended_tangent) > 1.0e-8 and length(next_tangent) > 1.0e-8:
+                    candidate_velocity = scale(normalize(blended_tangent), length(next_tangent))
             tangent_step = scale(candidate_velocity, settings.time_step)
             candidate_position = add(position, tangent_step)
             collision_start = add(position, scale(surface_normal, settings.surface_offset))
@@ -121,7 +242,6 @@ def simulate_trajectory(
             collision_end = candidate_position
 
         collision = collision_provider.sample(collision_start, collision_end)
-        follow_collision = None
         if was_attached and not collision.hit:
             collision = _sample_surface_follow(
                 candidate_position,
@@ -143,7 +263,13 @@ def simulate_trajectory(
                 velocity[2] + (candidate_velocity[2] - velocity[2]) * t,
             )
 
-            resolved_normal = normalize(collision.normal)
+            collision, resolved_normal = _resolve_surface_collision(
+                collision,
+                previous_surface_normal if was_attached else collision.normal,
+                velocity_at_impact,
+                settings,
+                collision_provider,
+            )
             if was_attached:
                 resolved_normal = _blend_surface_normal(previous_surface_normal, resolved_normal)
 

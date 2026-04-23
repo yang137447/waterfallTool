@@ -42,6 +42,15 @@ class StickyGapCollision(CollisionProvider):
         return CollisionSample(hit=False)
 
 
+class JaggedSurfaceCollision(CollisionProvider):
+    def sample(self, start, end):
+        if end[2] >= start[2]:
+            return CollisionSample(hit=False)
+        phase = int(abs(end[0]) * 10.0) % 2
+        normal = (0.0, 0.0, 1.0) if phase == 0 else (0.65, 0.0, 0.7599342076785331)
+        return CollisionSample(hit=True, point=(end[0], end[1], 0.0), normal=normal, support=max(0.0, normal[2]))
+
+
 def _angle_degrees(a, b):
     dot_value = a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
     length_a = (a[0] ** 2 + a[1] ** 2 + a[2] ** 2) ** 0.5
@@ -87,6 +96,28 @@ def test_surface_normal_blending_softens_triangle_normal_changes():
     blended = _blend_surface_normal((0.0, 0.0, 1.0), (0.4, 0.0, 0.916515138991168))
     assert 0.0 < blended[0] < 0.4
     assert blended[2] > 0.916515138991168
+
+
+def test_macro_surface_field_reduces_attached_normal_jitter_on_jagged_surface():
+    settings = EmitterSettings(
+        speed=2.0,
+        gravity=10.0,
+        drag=0.0,
+        time_step=0.1,
+        step_count=8,
+        attach_strength=1.0,
+        detach_threshold=0.2,
+        surface_offset=0.01,
+        surface_flow_radius=0.25,
+        surface_flow_samples=12,
+        surface_flow_relaxation=1.0,
+        surface_flow_inertia=0.8,
+    )
+    points = simulate_trajectory((0.0, 0.0, 0.2), (1.0, 0.0, -0.2), settings, JaggedSurfaceCollision())
+    attached_normals = [point.surface_normal for point in points if point.attached and point.surface_normal is not None]
+    assert len(attached_normals) >= 3
+    adjacent_angles = [_angle_degrees(attached_normals[i], attached_normals[i + 1]) for i in range(len(attached_normals) - 1)]
+    assert max(adjacent_angles) < 35.0
 
 
 def test_weak_support_still_resolves_hit_without_penetrating_surface():

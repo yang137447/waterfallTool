@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from ..core.types import CollisionProvider, CollisionSample
 
+BACKFACE_CULL_EPSILON = 1.0e-8
+
 
 class BlenderVisibleMeshCollisionProvider(CollisionProvider):
     def __init__(self, context, excluded_names: set[str] | None = None):
@@ -46,6 +48,10 @@ class BlenderVisibleMeshCollisionProvider(CollisionProvider):
                 continue
             world_location = evaluated.matrix_world @ location
             world_normal = (evaluated.matrix_world.to_3x3().inverted().transposed() @ normal).normalized()
+            normal_facing = world_normal.x * direction.x + world_normal.y * direction.y + world_normal.z * direction.z
+            if normal_facing > BACKFACE_CULL_EPSILON:
+                # Ignore back-face hits; keep front-facing and near-parallel contacts.
+                continue
             hit_distance = (world_location - start_vector).length
             if best_hit is None or hit_distance < best_hit[0]:
                 best_hit = (hit_distance, world_location, world_normal)

@@ -81,6 +81,13 @@ class FakeSplinePoint:
         self.co = (0.0, 0.0, 0.0, 1.0)
 
 
+class FakeBezierPoint:
+    def __init__(self):
+        self.co = (0.0, 0.0, 0.0)
+        self.handle_left_type = None
+        self.handle_right_type = None
+
+
 class FakeSplinePoints(list):
     def __init__(self):
         super().__init__([FakeSplinePoint()])
@@ -90,14 +97,25 @@ class FakeSplinePoints(list):
             self.append(FakeSplinePoint())
 
 
-class FakeSpline:
+class FakeBezierPoints(list):
     def __init__(self):
-        self.points = FakeSplinePoints()
+        super().__init__([FakeBezierPoint()])
+
+    def add(self, count):
+        for _ in range(count):
+            self.append(FakeBezierPoint())
+
+
+class FakeSpline:
+    def __init__(self, kind):
+        self.points = FakeSplinePoints() if kind == "POLY" else []
+        self.bezier_points = FakeBezierPoints() if kind == "BEZIER" else []
+        self.resolution_u = 12
 
 
 class FakeSplines(list):
-    def new(self, _kind):
-        spline = FakeSpline()
+    def new(self, kind):
+        spline = FakeSpline(kind)
         self.append(spline)
         return spline
 
@@ -108,6 +126,8 @@ class FakeSplines(list):
 class FakeCurveData:
     def __init__(self):
         self.dimensions = "3D"
+        self.resolution_u = 12
+        self.render_resolution_u = 12
         self.splines = FakeSplines()
 
 
@@ -259,7 +279,10 @@ def test_create_or_update_flow_curve_writes_local_positions_on_existing_object(m
     create_or_update_flow_curve(context=None, name="Flow", points=points)
 
     spline = curve_obj.data.splines[0]
-    assert spline.points[0].co == (2.0, 0.0, 0.0, 1.0)
+    assert spline.bezier_points[0].co == (2.0, 0.0, 0.0)
+    assert spline.bezier_points[0].handle_left_type == "VECTOR"
+    assert spline.bezier_points[0].handle_right_type == "VECTOR"
+    assert spline.resolution_u == 24
     assert curve_obj.get("waterfall_speed_t_cache") == [0.0]
 
 
@@ -452,6 +475,44 @@ def test_collision_sample_passes_local_space_distance_to_ray_cast(monkeypatch):
     provider.sample((0.0, 0.0, 0.0), (0.0, 0.0, -4.0))
 
     assert captured["distance"] == 2.0
+
+
+def test_collision_sample_ignores_backface_hits(monkeypatch):
+    fake_mathutils = types.SimpleNamespace(Vector=FakeVector)
+    monkeypatch.setitem(sys.modules, "mathutils", fake_mathutils)
+
+    class FakeEvaluatedObject:
+        def __init__(self):
+            self.matrix_world = FakeMatrixWorld()
+
+        def ray_cast(self, _start, _direction, distance):
+            assert distance > 0.0
+            # Normal points in same direction as ray (backface for this ray).
+            return True, FakeVector((0.0, 0.0, -0.5)), FakeVector((0.0, 0.0, -1.0)), 0
+
+    class FakeCollisionObject:
+        name = "Collision"
+        type = "MESH"
+
+        def visible_get(self):
+            return True
+
+        def get(self, _key, default=None):
+            return default
+
+        def evaluated_get(self, _depsgraph):
+            return FakeEvaluatedObject()
+
+    class FakeContext:
+        scene = types.SimpleNamespace(objects=[FakeCollisionObject()])
+
+        def evaluated_depsgraph_get(self):
+            return object()
+
+    provider = BlenderVisibleMeshCollisionProvider(FakeContext())
+    sample = provider.sample((0.0, 0.0, 0.0), (0.0, 0.0, -1.0))
+
+    assert sample.hit is False
 
 
 def test_create_or_update_flow_curve_accepts_empty_points(monkeypatch):

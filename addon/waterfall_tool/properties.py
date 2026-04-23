@@ -94,6 +94,13 @@ if bpy is not None:
         enable_cross_strip: bpy.props.BoolProperty(name="Enable Cross Strip", default=True, update=_refresh_from_curve, description="Enable the vertical cross strip")
         cross_angle: bpy.props.FloatProperty(name="Cross Angle", default=90.0, min=1.0, max=179.0, update=_refresh_from_curve)
         cross_width_scale: bpy.props.FloatProperty(name="Cross Width Scale", default=1.0, min=0.0, update=_refresh_from_curve)
+        cross_ramp_length: bpy.props.FloatProperty(
+            name="Cross Ramp Length",
+            default=1.0,
+            min=0.0,
+            description="Distance from the lip where cross strip width ramps from thin to full",
+            update=_refresh_from_curve,
+        )
         uv_base_speed: bpy.props.FloatProperty(name="UV Base Speed", default=8.0, min=0.001, update=_refresh_from_curve)
         uv_speed_smoothing_length: bpy.props.FloatProperty(name="UV Speed Smoothing Length", default=0.0, min=0.0, update=_refresh_from_curve)
         emitter_name: bpy.props.StringProperty(name="Emitter")
@@ -109,6 +116,33 @@ if bpy is not None:
         attach_strength: bpy.props.FloatProperty(name="Attach Strength", default=0.7, min=0.0, max=1.0)
         detach_threshold: bpy.props.FloatProperty(name="Detach Threshold", default=0.35, min=0.0, max=1.0)
         surface_offset: bpy.props.FloatProperty(name="Surface Offset", default=0.01, min=0.0, precision=4, description="Distance to keep away from collision surface to avoid mesh intersection")
+        surface_flow_radius: bpy.props.FloatProperty(
+            name="Surface Flow Radius",
+            default=0.35,
+            min=0.0,
+            description="Neighbor probing radius for building a smoother support surface",
+        )
+        surface_flow_samples: bpy.props.IntProperty(
+            name="Surface Flow Samples",
+            default=8,
+            min=4,
+            max=32,
+            description="Number of radial probes used to average local surface shape",
+        )
+        surface_flow_relaxation: bpy.props.FloatProperty(
+            name="Surface Flow Relaxation",
+            default=0.85,
+            min=0.0,
+            max=1.0,
+            description="How strongly trajectory points relax toward the smoothed support surface",
+        )
+        surface_flow_inertia: bpy.props.FloatProperty(
+            name="Surface Flow Inertia",
+            default=0.7,
+            min=0.0,
+            max=1.0,
+            description="How much attached flow direction keeps previous tangent momentum",
+        )
         terminal_speed: bpy.props.FloatProperty(name="Terminal Speed", default=0.0, min=0.0)
         cutoff_height: bpy.props.FloatProperty(
             name="Cutoff Height",

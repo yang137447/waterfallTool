@@ -18,6 +18,10 @@ class EmitterSettings:
     surface_offset: float = 0.01
     terminal_speed: float = 0.0
     cutoff_height: float = float("-inf")
+    surface_flow_radius: float = 0.35
+    surface_flow_samples: int = 8
+    surface_flow_relaxation: float = 0.85
+    surface_flow_inertia: float = 0.7
 
 
 @dataclass(frozen=True)
@@ -33,6 +37,7 @@ class MeshSettings:
     enable_cross_strip: bool = True
     cross_angle_degrees: float = 90.0
     cross_width_scale: float = 1.0
+    cross_ramp_length: float = 0.0
     uv_base_speed: float = 8.0
     uv_speed_smoothing_length: float = 0.0
     cutoff_height: float | None = None
