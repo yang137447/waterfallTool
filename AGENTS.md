@@ -41,6 +41,7 @@
 - 宽度基准由绝对值 `base_width` 决定；这保证了无论轨迹是否因为碰撞或规则截断变短，发射起点的瀑布宽度都保持物理一致。
 - `cross_ramp_length` 控制垂直 cross strip 的起始展开距离：起段先窄后宽，用于弱化崖口处突兀立片。
 - 网格密度模型已切换为：`width_density` 控制横向分片；`longitudinal_step_length` 控制纵向基础步长；曲率越大时按 `curvature_min_angle_degrees` 自动减小纵向有效步长。
+- `scripts/activate_blender_addon.py` 若会调用 `bpy.ops.wm.save_userpref()`，禁止使用 `--background` 启动 Blender；应在带 UI 上下文的正常启动中执行，并在脚本末尾调用 `bpy.ops.wm.quit_blender()` 自动退出，避免将“残缺插件启用列表”写回用户偏好。
 
 ## 默认执行模式
 
